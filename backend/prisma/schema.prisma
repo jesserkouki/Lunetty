@@ -1,0 +1,1049 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RolePlateforme {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum StatutUtilisateur {
+  ACTIVE
+  EN_ATTENTE_VERIFICATION
+  SUSPENDU
+  DESACTIVE
+}
+
+enum RoleMembre {
+  PROPRIETAIRE
+  GERANT
+  OPTICIEN
+  EMPLOYE
+}
+
+enum StatutAdhesion {
+  INVITE
+  ACTIVE
+  SUSPENDU
+  RETIRE
+}
+
+enum StatutMagasin {
+  BROUILLON
+  ACTIVE
+  EN_PAUSE
+  SUSPENDU
+  FERME
+}
+
+enum TypeAdresse {
+  DOMICILE
+  FACTURATION
+  LIVRAISON
+  STORE
+  AUTRE
+}
+
+enum TypeProduit {
+  MONTURE
+  VERRE
+  LENTILLE_CONTACT
+  ACCESSOIRE
+}
+
+enum StatutProduit {
+  BROUILLON
+  ACTIVE
+  ARCHIVE
+}
+
+enum PublicCible {
+  FEMME
+  HOMME
+  MIXTE
+  ENFANT
+}
+
+enum TypeConceptionVerre {
+  UNIFOCALE
+  BIFOCALE
+  PROGRESSIF
+  LECTURE
+  AUTRE
+}
+
+enum TraitementVerre {
+  LUMIERE_BLEUE
+  PHOTOCHROMIQUE
+  POLARISE
+  ANTI_REFLET
+  ANTI_RAYURE
+  PROTECTION_UV
+  AUTRE
+}
+
+enum FrequenceRemplacementLentille {
+  QUOTIDIEN
+  HEBDOMADAIRE
+  BIMENSUEL
+  MENSUEL
+  ANNUEL
+  AUTRE
+}
+
+enum StatutAnnonce {
+  BROUILLON
+  ACTIVE
+  EN_PAUSE
+  RUPTURE_STOCK
+  ARCHIVE
+}
+
+enum TypeEmplacementStock {
+  STORE
+  ENTREPOT
+  AUTRE
+}
+
+enum TypeMouvementStock {
+  RECEPTION
+  VENTE
+  RETOUR
+  AJUSTEMENT
+  TRANSFERT_ENTRANT
+  TRANSFERT_SORTANT
+  ENDOMMAGE
+  RESERVE
+  LIBERE
+}
+
+enum CoteOeil {
+  DROIT
+  GAUCHE
+}
+
+enum StatutPanier {
+  ACTIVE
+  CONVERTI
+  ABANDONNE
+  EXPIRE
+}
+
+enum StatutCommande {
+  EN_ATTENTE_PAIEMENT
+  PAYE
+  CONFIRME
+  EN_TRAITEMENT
+  PRET_A_RETIRER
+  EXPEDIE
+  TERMINE
+  ANNULE
+  REMBOURSE
+  PARTIELLEMENT_REMBOURSE
+}
+
+enum StatutPaiement {
+  CREE
+  ACTION_REQUISE
+  EN_TRAITEMENT
+  REUSSI
+  ECHOUE
+  ANNULE
+  REMBOURSE
+  PARTIELLEMENT_REMBOURSE
+}
+
+enum FournisseurPaiement {
+  STRIPE
+  PAYPAL
+  FLOUCI
+  KONNECT
+  AUTRE
+}
+
+enum StatutRemboursement {
+  PENDING
+  REUSSI
+  ECHOUE
+  ANNULE
+}
+
+enum StatutRendezVous {
+  DEMANDE
+  CONFIRME
+  REPLANIFIE
+  TERMINE
+  ANNULE
+  ABSENT
+}
+
+enum StatutAvis {
+  PENDING
+  PUBLIE
+  MASQUE
+  REJETE
+}
+
+enum VisibilitePublication {
+  PUBLIC
+  ABONNES
+  CLIENTS_MAGASIN
+  PRIVE
+}
+
+enum TypeMedia {
+  IMAGE
+  VIDEO
+}
+
+enum StatutEssayage {
+  CREE
+  EN_TRAITEMENT
+  TERMINE
+  ECHOUE
+  EXPIRE
+  DELETED
+}
+
+enum TypeFichierEssayage {
+  IMAGE_ENTREE
+  IMAGE_SORTIE
+  VIDEO
+  AUTRE
+}
+
+enum TypeNotification {
+  MISE_A_JOUR_COMMANDE
+  MISE_A_JOUR_PAIEMENT
+  MISE_A_JOUR_RENDEZ_VOUS
+  NOUVEL_ABONNE
+  INTERACTION_PUBLICATION
+  PROMOTION
+  SYSTEME
+}
+
+enum CanalNotification {
+  DANS_APPLICATION
+  EMAIL
+  PUSH
+}
+
+enum StatutNotification {
+  PENDING
+  ENVOYE
+  ECHOUE
+  LU
+}
+
+model Utilisateur {
+  id                              String                     @id @default(uuid()) @db.Uuid
+  role                            RolePlateforme             @default(USER)
+  prenom                          String                     @map("first_name") @db.VarChar(100)
+  nom                             String                     @map("last_name") @db.VarChar(100)
+  nom_utilisateur                 String?                    @unique @db.VarChar(50)
+  email                           String                     @unique @db.VarChar(255)
+  empreinte_mot_de_passe          String                     @map("password_hash") @db.VarChar(255)
+  telephone                       String?                    @db.VarChar(30)
+  telephone_verifie_le            DateTime?                  @map("phone_verified_at") @db.Timestamptz(6)
+  email_verifie_le                DateTime?                  @map("email_verified_at") @db.Timestamptz(6)
+  url_image_profil                String?                    @map("profile_image_url") @db.VarChar(2048)
+  statut                          StatutUtilisateur          @default(EN_ATTENTE_VERIFICATION)
+  derniere_connexion_le           DateTime?                  @map("last_login_at") @db.Timestamptz(6)
+  langue_preferee                 String                     @default("fr") @map("preferred_language") @db.VarChar(10)
+  authentification_double_facteur Boolean                    @default(false) @map("two_factor_enabled")
+  cree_le                         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le                      DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  supprime_le                     DateTime?                  @map("deleted_at") @db.Timestamptz(6)
+  profil_client                   ProfilClient?
+  profil_opticien                 ProfilOpticien?
+  adresses                        Adresse[]
+  adhesions                       MembreMagasin[]
+  paniers                         Panier[]
+  commandes                       Commande[]
+  rendez_vous                     RendezVous[]
+  avis_produits                   AvisProduit[]
+  avis_magasins                   AvisMagasin[]
+  produits_favoris                ProduitFavori[]
+  magasins_favoris                MagasinFavori[]
+  publications_redigees           Publication[]              @relation("AuteurPublication")
+  commentaires                    CommentairePublication[]
+  mentions_j_aime                 AimePublication[]
+  abonnements                     AbonnementUtilisateur[]    @relation("Abonnements")
+  abonnes                         AbonnementUtilisateur[]    @relation("Abonnes")
+  abonnements_magasins            AbonnementMagasin[]
+  partages                        PartagePublication[]
+  sessions_essayage               SessionEssayage[]
+  notifications                   Notification[]
+  preferences_notifications       PreferenceNotification[]
+  journaux_audit                  JournalAudit[]
+  mouvements_stock                MouvementStock[]
+  changements_statut_commande     HistoriqueStatutCommande[]
+  annonces_creees                 AnnonceMagasin[]           @relation("CreateurAnnonce")
+
+  @@index([statut, supprime_le])
+  @@map("utilisateurs")
+}
+
+model ProfilClient {
+  id                String       @id @default(uuid()) @db.Uuid
+  utilisateur_id    String       @unique @map("user_id") @db.Uuid
+  date_naissance    DateTime?    @map("date_of_birth") @db.Date
+  accepte_marketing Boolean      @default(false) @map("marketing_opt_in")
+  cree_le           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  utilisateur       Utilisateur  @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  ordonnances       Ordonnance[]
+  commandes         Commande[]
+
+  @@map("profils_clients")
+}
+
+model ProfilOpticien {
+  id                   String      @id @default(uuid()) @db.Uuid
+  utilisateur_id       String      @unique @map("user_id") @db.Uuid
+  titre_professionnel  String?     @map("professional_title") @db.VarChar(120)
+  numero_professionnel String?     @map("professional_number") @db.VarChar(100)
+  biographie           String?     @db.Text
+  cree_le              DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le           DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  utilisateur          Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+
+  @@map("profils_opticiens")
+}
+
+model Magasin {
+  id                   String               @id @default(uuid()) @db.Uuid
+  nom                  String               @db.VarChar(160)
+  slug                 String               @unique @db.VarChar(180)
+  description          String?              @db.Text
+  url_logo             String?              @map("logo_url") @db.VarChar(2048)
+  url_image_couverture String?              @map("cover_image_url") @db.VarChar(2048)
+  email                String?              @db.VarChar(255)
+  telephone            String?              @db.VarChar(30)
+  url_site_web         String?              @map("website_url") @db.VarChar(2048)
+  code_enregistrement  String?              @unique @map("registration_code") @db.VarChar(100)
+  statut               StatutMagasin        @default(BROUILLON)
+  fuseau_horaire       String               @default("Africa/Tunis") @db.VarChar(80)
+  devise               String               @default("TND") @db.Char(3)
+  cree_le              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le           DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  supprime_le          DateTime?            @map("deleted_at") @db.Timestamptz(6)
+  adhesions            MembreMagasin[]
+  adresses             Adresse[]
+  emplacements         EmplacementMagasin[]
+  annonces             AnnonceMagasin[]
+  commandes            Commande[]
+  rendez_vous          RendezVous[]
+  avis                 AvisMagasin[]
+  favoris              MagasinFavori[]
+  posts                Publication[]
+  abonnes              AbonnementMagasin[]
+  ordonnances          Ordonnance[]         @relation("MagasinPrescripteur")
+
+  @@index([statut, supprime_le])
+  @@map("magasins")
+}
+
+model MembreMagasin {
+  id             String         @id @default(uuid()) @db.Uuid
+  magasin_id     String         @map("store_id") @db.Uuid
+  utilisateur_id String         @map("user_id") @db.Uuid
+  role           RoleMembre     @default(EMPLOYE)
+  statut         StatutAdhesion @default(INVITE)
+  invite_le      DateTime?      @map("invited_at") @db.Timestamptz(6)
+  rejoint_le     DateTime?      @map("joined_at") @db.Timestamptz(6)
+  cree_le        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  magasin        Magasin        @relation(fields: [magasin_id], references: [id], onDelete: Cascade)
+  utilisateur    Utilisateur    @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+
+  @@unique([magasin_id, utilisateur_id])
+  @@index([utilisateur_id, statut])
+  @@map("membres_magasins")
+}
+
+model Adresse {
+  id               String       @id @default(uuid()) @db.Uuid
+  utilisateur_id   String?      @map("user_id") @db.Uuid
+  magasin_id       String?      @map("store_id") @db.Uuid
+  type             TypeAdresse  @default(AUTRE)
+  libelle          String?      @db.VarChar(80)
+  nom_destinataire String?      @map("recipient_name") @db.VarChar(160)
+  telephone        String?      @db.VarChar(30)
+  ligne_1          String       @db.VarChar(255)
+  ligne_2          String?      @db.VarChar(255)
+  ville            String       @db.VarChar(100)
+  region           String?      @db.VarChar(100)
+  code_postal      String?      @map("postal_code") @db.VarChar(20)
+  code_pays        String       @default("TN") @map("country_code") @db.Char(2)
+  latitude         Decimal?     @db.Decimal(9, 6)
+  longitude        Decimal?     @db.Decimal(9, 6)
+  est_par_defaut   Boolean      @default(false) @map("is_default")
+  cree_le          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  utilisateur      Utilisateur? @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  magasin          Magasin?     @relation(fields: [magasin_id], references: [id], onDelete: Cascade)
+
+  @@index([utilisateur_id, est_par_defaut])
+  @@index([magasin_id])
+  @@map("adresses")
+}
+
+model EmplacementMagasin {
+  id             String               @id @default(uuid()) @db.Uuid
+  magasin_id     String               @map("store_id") @db.Uuid
+  nom            String               @db.VarChar(120)
+  code           String?              @db.VarChar(40)
+  type           TypeEmplacementStock @default(STORE)
+  est_par_defaut Boolean              @default(false) @map("is_default")
+  est_actif      Boolean              @default(true) @map("is_active")
+  magasin        Magasin              @relation(fields: [magasin_id], references: [id], onDelete: Cascade)
+  stocks         Stock[]
+
+  @@unique([magasin_id, code])
+  @@map("emplacements_magasins")
+}
+
+model Produit {
+  id           String            @id @default(uuid()) @db.Uuid
+  nom          String            @db.VarChar(200)
+  slug         String            @unique @db.VarChar(220)
+  description  String?           @db.Text
+  marque       String?           @db.VarChar(120)
+  fabricant    String?           @db.VarChar(120)
+  type         TypeProduit
+  statut       StatutProduit     @default(BROUILLON)
+  public_cible PublicCible       @default(MIXTE)
+  categorie    String?           @db.VarChar(100)
+  etiquettes   String[]          @default([])
+  attributs    Json?
+  cree_le      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  supprime_le  DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  variantes    VarianteProduit[]
+  annonces     AnnonceMagasin[]
+  avis         AvisProduit[]
+  favoris      ProduitFavori[]
+
+  @@index([type, statut])
+  @@index([marque, categorie])
+  @@map("produits")
+}
+
+model VarianteProduit {
+  id                        String                          @id @default(uuid()) @db.Uuid
+  produit_id                String                          @map("product_id") @db.Uuid
+  variantName               String?                         @map("variant_name") @db.VarChar(120)
+  reference_globale         String?                         @unique @map("global_sku") @db.VarChar(100)
+  code_barres               String?                         @unique @db.VarChar(100)
+  couleur                   String?                         @db.VarChar(80)
+  taille                    String?                         @db.VarChar(80)
+  materiau                  String?                         @db.VarChar(100)
+  url_image                 String?                         @map("image_url") @db.VarChar(2048)
+  attributs                 Json?
+  est_actif                 Boolean                         @default(true) @map("is_active")
+  produit                   Produit                         @relation(fields: [produit_id], references: [id], onDelete: Cascade)
+  caracteristiques_monture  CaracteristiqueMonture?
+  caracteristiques_verre    CaracteristiqueVerre?
+  caracteristiques_lentille CaracteristiqueLentilleContact?
+  variantes_annonce         VarianteAnnonceMagasin[]
+  sessions_essayage         SessionEssayage[]
+
+  @@index([produit_id, est_actif])
+  @@map("variantes_produits")
+}
+
+model CaracteristiqueMonture {
+  id                   String          @id @default(uuid()) @db.Uuid
+  variante_id          String          @unique @map("variant_id") @db.Uuid
+  forme_monture        String?         @map("frame_shape") @db.VarChar(80)
+  type_monture         String?         @map("frame_type") @db.VarChar(80)
+  largeur_monture_mm   Decimal?        @map("frame_width_mm") @db.Decimal(6, 2)
+  largeur_verre_mm     Decimal?        @map("lens_width_mm") @db.Decimal(6, 2)
+  largeur_pont_mm      Decimal?        @map("bridge_width_mm") @db.Decimal(6, 2)
+  longueur_branches_mm Decimal?        @map("temple_length_mm") @db.Decimal(6, 2)
+  hauteur_verre_mm     Decimal?        @map("lens_height_mm") @db.Decimal(6, 2)
+  variante             VarianteProduit @relation(fields: [variante_id], references: [id], onDelete: Cascade)
+
+  @@map("caracteristiques_montures")
+}
+
+model CaracteristiqueVerre {
+  id                String              @id @default(uuid()) @db.Uuid
+  variante_id       String              @unique @map("variant_id") @db.Uuid
+  conception        TypeConceptionVerre
+  materiau          String?             @db.VarChar(100)
+  indice_refraction Decimal?            @map("index_of_refraction") @db.Decimal(4, 2)
+  traitements       TraitementVerre[]   @default([])
+  variante          VarianteProduit     @relation(fields: [variante_id], references: [id], onDelete: Cascade)
+
+  @@map("caracteristiques_verres")
+}
+
+model CaracteristiqueLentilleContact {
+  id            String                        @id @default(uuid()) @db.Uuid
+  variante_id   String                        @unique @map("variant_id") @db.Uuid
+  remplacement  FrequenceRemplacementLentille
+  courbure_base Decimal?                      @map("base_curve") @db.Decimal(4, 2)
+  diametre_mm   Decimal?                      @map("diameter_mm") @db.Decimal(4, 2)
+  teneur_eau    Decimal?                      @map("water_content") @db.Decimal(5, 2)
+  materiau      String?                       @db.VarChar(100)
+  variante      VarianteProduit               @relation(fields: [variante_id], references: [id], onDelete: Cascade)
+
+  @@map("caracteristiques_lentilles_contact")
+}
+
+model AnnonceMagasin {
+  id                        String                   @id @default(uuid()) @db.Uuid
+  magasin_id                String                   @map("store_id") @db.Uuid
+  produit_id                String                   @map("product_id") @db.Uuid
+  cree_par_id               String?                  @map("created_by_id") @db.Uuid
+  titre_personnalise        String?                  @map("title_override") @db.VarChar(200)
+  description_personnalisee String?                  @map("description_override") @db.Text
+  statut                    StatutAnnonce            @default(BROUILLON)
+  publie_le                 DateTime?                @map("published_at") @db.Timestamptz(6)
+  cree_le                   DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le                DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  supprime_le               DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  magasin                   Magasin                  @relation(fields: [magasin_id], references: [id], onDelete: Cascade)
+  produit                   Produit                  @relation(fields: [produit_id], references: [id], onDelete: Restrict)
+  cree_par                  Utilisateur?             @relation("CreateurAnnonce", fields: [cree_par_id], references: [id], onDelete: SetNull)
+  variantes                 VarianteAnnonceMagasin[]
+
+  @@unique([magasin_id, produit_id])
+  @@index([magasin_id, statut, supprime_le])
+  @@map("annonces_magasins")
+}
+
+model VarianteAnnonceMagasin {
+  id                  String            @id @default(uuid()) @db.Uuid
+  annonce_id          String            @map("listing_id") @db.Uuid
+  variante_id         String            @map("variant_id") @db.Uuid
+  reference_magasin   String?           @map("store_sku") @db.VarChar(100)
+  code_barres_magasin String?           @map("store_barcode") @db.VarChar(100)
+  prix                Decimal           @db.Decimal(12, 3)
+  prix_compare        Decimal?          @map("compare_at_price") @db.Decimal(12, 3)
+  devise              String            @default("TND") @db.Char(3)
+  est_disponible      Boolean           @default(true) @map("is_available")
+  annonce             AnnonceMagasin    @relation(fields: [annonce_id], references: [id], onDelete: Cascade)
+  variante            VarianteProduit   @relation(fields: [variante_id], references: [id], onDelete: Restrict)
+  stocks              Stock[]
+  articles_panier     ArticlePanier[]
+  articles_commande   ArticleCommande[]
+
+  @@unique([annonce_id, variante_id])
+  @@unique([reference_magasin])
+  @@unique([code_barres_magasin])
+  @@index([annonce_id, est_disponible])
+  @@map("variantes_annonces_magasins")
+}
+
+model Stock {
+  id                        String                 @id @default(uuid()) @db.Uuid
+  storeListingVariantId     String                 @map("store_listing_variant_id") @db.Uuid
+  emplacement_id            String                 @map("location_id") @db.Uuid
+  quantite_disponible       Int                    @default(0) @map("quantity_on_hand")
+  quantite_reservee         Int                    @default(0) @map("quantity_reserved")
+  seuil_reapprovisionnement Int                    @default(0) @map("reorder_level")
+  cree_le                   DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le                DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  variante_annonce          VarianteAnnonceMagasin @relation(fields: [storeListingVariantId], references: [id], onDelete: Cascade)
+  location                  EmplacementMagasin     @relation(fields: [emplacement_id], references: [id], onDelete: Restrict)
+  mouvements                MouvementStock[]
+
+  @@unique([storeListingVariantId, emplacement_id])
+  @@map("stocks")
+}
+
+model MouvementStock {
+  id        String             @id @default(uuid()) @db.Uuid
+  stock_id  String             @map("inventory_id") @db.Uuid
+  acteur_id String?            @map("actor_id") @db.Uuid
+  type      TypeMouvementStock
+  quantite  Int
+  reference String?            @db.VarChar(120)
+  note      String?            @db.Text
+  cree_le   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  inventory Stock              @relation(fields: [stock_id], references: [id], onDelete: Restrict)
+  acteur    Utilisateur?       @relation(fields: [acteur_id], references: [id], onDelete: SetNull)
+
+  @@index([stock_id, cree_le])
+  @@map("mouvements_stock")
+}
+
+model Ordonnance {
+  id                      String            @id @default(uuid()) @db.Uuid
+  profil_client_id        String            @map("client_profile_id") @db.Uuid
+  magasin_prescripteur_id String?           @map("prescribing_store_id") @db.Uuid
+  titre                   String?           @db.VarChar(120)
+  prescrit_le             DateTime?         @map("prescribed_at") @db.Date
+  expire_le               DateTime?         @map("expires_at") @db.Date
+  notes                   String?           @db.Text
+  cle_document_source     String?           @map("source_document_key") @db.VarChar(1024)
+  cree_le                 DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  profil_client           ProfilClient      @relation(fields: [profil_client_id], references: [id], onDelete: Cascade)
+  magasin_prescripteur    Magasin?          @relation("MagasinPrescripteur", fields: [magasin_prescripteur_id], references: [id], onDelete: SetNull)
+  yeux                    OeilOrdonnance[]
+  articles_commande       ArticleCommande[]
+
+  @@index([profil_client_id, prescrit_le])
+  @@map("ordonnances")
+}
+
+model OeilOrdonnance {
+  id               String     @id @default(uuid()) @db.Uuid
+  ordonnance_id    String     @map("prescription_id") @db.Uuid
+  cote             CoteOeil
+  sphere           Decimal?   @db.Decimal(5, 2)
+  cylindre         Decimal?   @db.Decimal(5, 2)
+  axe              Int?
+  addition         Decimal?   @db.Decimal(5, 2)
+  prisme           Decimal?   @db.Decimal(5, 2)
+  base             String?    @db.VarChar(20)
+  ecart_pupillaire Decimal?   @map("pupillary_distance") @db.Decimal(5, 2)
+  prescription     Ordonnance @relation(fields: [ordonnance_id], references: [id], onDelete: Cascade)
+
+  @@unique([ordonnance_id, cote])
+  @@map("yeux_ordonnances")
+}
+
+model Panier {
+  id             String          @id @default(uuid()) @db.Uuid
+  utilisateur_id String          @map("user_id") @db.Uuid
+  statut         StatutPanier    @default(ACTIVE)
+  expire_le      DateTime?       @map("expires_at") @db.Timestamptz(6)
+  cree_le        DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  utilisateur    Utilisateur     @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  articles       ArticlePanier[]
+
+  @@index([utilisateur_id, statut])
+  @@map("paniers")
+}
+
+model ArticlePanier {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  panier_id           String                 @map("cart_id") @db.Uuid
+  variante_annonce_id String                 @map("listing_variant_id") @db.Uuid
+  quantite            Int                    @default(1)
+  cree_le             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  cart                Panier                 @relation(fields: [panier_id], references: [id], onDelete: Cascade)
+  variante_annonce    VarianteAnnonceMagasin @relation(fields: [variante_annonce_id], references: [id], onDelete: Restrict)
+
+  @@unique([panier_id, variante_annonce_id])
+  @@map("articles_paniers")
+}
+
+model Commande {
+  id                             String                     @id @default(uuid()) @db.Uuid
+  numero_commande                String                     @unique @map("order_number") @db.VarChar(40)
+  utilisateur_id                 String                     @map("user_id") @db.Uuid
+  profil_client_id               String?                    @map("client_profile_id") @db.Uuid
+  magasin_id                     String                     @map("store_id") @db.Uuid
+  statut                         StatutCommande             @default(EN_ATTENTE_PAIEMENT)
+  devise                         String                     @default("TND") @db.Char(3)
+  sous_total                     Decimal                    @db.Decimal(12, 3)
+  total_remise                   Decimal                    @default(0) @map("discount_total") @db.Decimal(12, 3)
+  total_taxes                    Decimal                    @default(0) @map("tax_total") @db.Decimal(12, 3)
+  total_livraison                Decimal                    @default(0) @map("shipping_total") @db.Decimal(12, 3)
+  total_general                  Decimal                    @map("grand_total") @db.Decimal(12, 3)
+  note_client                    String?                    @map("customer_note") @db.Text
+  instantane_adresse_facturation Json?                      @map("billing_address_snapshot")
+  instantane_adresse_livraison   Json?                      @map("shipping_address_snapshot")
+  passee_le                      DateTime?                  @map("placed_at") @db.Timestamptz(6)
+  terminee_le                    DateTime?                  @map("completed_at") @db.Timestamptz(6)
+  annulee_le                     DateTime?                  @map("cancelled_at") @db.Timestamptz(6)
+  cree_le                        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le                     DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  utilisateur                    Utilisateur                @relation(fields: [utilisateur_id], references: [id], onDelete: Restrict)
+  profil_client                  ProfilClient?              @relation(fields: [profil_client_id], references: [id], onDelete: SetNull)
+  magasin                        Magasin                    @relation(fields: [magasin_id], references: [id], onDelete: Restrict)
+  articles                       ArticleCommande[]
+  historique_statuts             HistoriqueStatutCommande[]
+  paiements                      Paiement[]
+  remboursements                 Remboursement[]
+  appointment                    RendezVous?
+  avis_magasin                   AvisMagasin?
+
+  @@index([utilisateur_id, cree_le])
+  @@index([magasin_id, statut, cree_le])
+  @@map("commandes")
+}
+
+model ArticleCommande {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  commande_id            String                  @map("order_id") @db.Uuid
+  variante_annonce_id    String?                 @map("listing_variant_id") @db.Uuid
+  instantane_nom_produit String                  @map("product_name_snapshot") @db.VarChar(200)
+  instantane_variante    Json?                   @map("variant_snapshot")
+  instantane_reference   String?                 @map("sku_snapshot") @db.VarChar(100)
+  quantite               Int
+  prix_unitaire          Decimal                 @map("unit_price") @db.Decimal(12, 3)
+  montant_remise         Decimal                 @default(0) @map("discount_amount") @db.Decimal(12, 3)
+  total_ligne            Decimal                 @map("line_total") @db.Decimal(12, 3)
+  ordonnance_id          String?                 @map("prescription_id") @db.Uuid
+  order                  Commande                @relation(fields: [commande_id], references: [id], onDelete: Cascade)
+  variante_annonce       VarianteAnnonceMagasin? @relation(fields: [variante_annonce_id], references: [id], onDelete: SetNull)
+  prescription           Ordonnance?             @relation(fields: [ordonnance_id], references: [id], onDelete: SetNull)
+
+  @@index([commande_id])
+  @@map("articles_commandes")
+}
+
+model HistoriqueStatutCommande {
+  id               String          @id @default(uuid()) @db.Uuid
+  commande_id      String          @map("order_id") @db.Uuid
+  statut_precedent StatutCommande? @map("from_status")
+  statut_suivant   StatutCommande  @map("to_status")
+  note             String?         @db.Text
+  modifie_par_id   String?         @map("changed_by_id") @db.Uuid
+  cree_le          DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  order            Commande        @relation(fields: [commande_id], references: [id], onDelete: Cascade)
+  modifie_par      Utilisateur?    @relation(fields: [modifie_par_id], references: [id], onDelete: SetNull)
+
+  @@index([commande_id, cree_le])
+  @@map("historique_statuts_commandes")
+}
+
+model Paiement {
+  id                      String              @id @default(uuid()) @db.Uuid
+  commande_id             String              @map("order_id") @db.Uuid
+  fournisseur             FournisseurPaiement
+  statut                  StatutPaiement      @default(CREE)
+  montant                 Decimal             @db.Decimal(12, 3)
+  devise                  String              @default("TND") @db.Char(3)
+  id_paiement_fournisseur String?             @unique @map("provider_payment_id") @db.VarChar(180)
+  url_paiement            String?             @map("checkout_url") @db.VarChar(2048)
+  cle_idempotence         String?             @unique @map("idempotency_key") @db.VarChar(180)
+  code_echec              String?             @map("failure_code") @db.VarChar(100)
+  message_echec           String?             @map("failure_message") @db.Text
+  donnees_fournisseur     Json?               @map("provider_payload")
+  paye_le                 DateTime?           @map("paid_at") @db.Timestamptz(6)
+  cree_le                 DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le              DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  order                   Commande            @relation(fields: [commande_id], references: [id], onDelete: Restrict)
+  remboursements          Remboursement[]
+
+  @@index([commande_id, cree_le])
+  @@map("paiements")
+}
+
+model Remboursement {
+  id                           String              @id @default(uuid()) @db.Uuid
+  commande_id                  String              @map("order_id") @db.Uuid
+  paymentId                    String              @map("payment_id") @db.Uuid
+  montant                      Decimal             @db.Decimal(12, 3)
+  devise                       String              @default("TND") @db.Char(3)
+  statut                       StatutRemboursement @default(PENDING)
+  id_remboursement_fournisseur String?             @unique @map("provider_refund_id") @db.VarChar(180)
+  raison                       String?             @db.Text
+  traite_le                    DateTime?           @map("processed_at") @db.Timestamptz(6)
+  cree_le                      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  order                        Commande            @relation(fields: [commande_id], references: [id], onDelete: Restrict)
+  payment                      Paiement            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([commande_id, statut])
+  @@map("remboursements")
+}
+
+model EvenementWebhookPaiement {
+  id                       String              @id @default(uuid()) @db.Uuid
+  fournisseur              FournisseurPaiement
+  id_evenement_fournisseur String              @map("provider_event_id") @db.VarChar(200)
+  type_evenement           String              @map("event_type") @db.VarChar(150)
+  donnees                  Json
+  traite_le                DateTime?           @map("processed_at") @db.Timestamptz(6)
+  erreur_traitement        String?             @map("processing_error") @db.Text
+  recu_le                  DateTime            @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@unique([fournisseur, id_evenement_fournisseur])
+  @@index([traite_le, recu_le])
+  @@map("evenements_webhook_paiement")
+}
+
+model RendezVous {
+  id             String           @id @default(uuid()) @db.Uuid
+  utilisateur_id String           @map("user_id") @db.Uuid
+  magasin_id     String           @map("store_id") @db.Uuid
+  commande_id    String?          @unique @map("order_id") @db.Uuid
+  statut         StatutRendezVous @default(DEMANDE)
+  type_service   String           @map("service_type") @db.VarChar(100)
+  commence_le    DateTime         @map("starts_at") @db.Timestamptz(6)
+  termine_le     DateTime         @map("ends_at") @db.Timestamptz(6)
+  note_client    String?          @map("customer_note") @db.Text
+  note_interne   String?          @map("internal_note") @db.Text
+  cree_le        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  utilisateur    Utilisateur      @relation(fields: [utilisateur_id], references: [id], onDelete: Restrict)
+  magasin        Magasin          @relation(fields: [magasin_id], references: [id], onDelete: Restrict)
+  order          Commande?        @relation(fields: [commande_id], references: [id], onDelete: SetNull)
+
+  @@index([magasin_id, commence_le, statut])
+  @@index([utilisateur_id, commence_le])
+  @@map("rendez_vous")
+}
+
+model AvisProduit {
+  id             String      @id @default(uuid()) @db.Uuid
+  produit_id     String      @map("product_id") @db.Uuid
+  utilisateur_id String      @map("user_id") @db.Uuid
+  note           Int
+  titre          String?     @db.VarChar(160)
+  contenu        String?     @db.Text
+  statut         StatutAvis  @default(PENDING)
+  achat_verifie  Boolean     @default(false) @map("verified_purchase")
+  cree_le        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  produit        Produit     @relation(fields: [produit_id], references: [id], onDelete: Restrict)
+  utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Restrict)
+
+  @@index([produit_id, statut, cree_le])
+  @@map("avis_produits")
+}
+
+model AvisMagasin {
+  id             String      @id @default(uuid()) @db.Uuid
+  magasin_id     String      @map("store_id") @db.Uuid
+  utilisateur_id String      @map("user_id") @db.Uuid
+  commande_id    String?     @unique @map("order_id") @db.Uuid
+  note           Int
+  titre          String?     @db.VarChar(160)
+  contenu        String?     @db.Text
+  statut         StatutAvis  @default(PENDING)
+  cree_le        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  magasin        Magasin     @relation(fields: [magasin_id], references: [id], onDelete: Restrict)
+  utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Restrict)
+  order          Commande?   @relation(fields: [commande_id], references: [id], onDelete: SetNull)
+
+  @@index([magasin_id, statut, cree_le])
+  @@map("avis_magasins")
+}
+
+model ProduitFavori {
+  id             String      @id @default(uuid()) @db.Uuid
+  utilisateur_id String      @map("user_id") @db.Uuid
+  produit_id     String      @map("product_id") @db.Uuid
+  cree_le        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  produit        Produit     @relation(fields: [produit_id], references: [id], onDelete: Cascade)
+
+  @@unique([utilisateur_id, produit_id])
+  @@map("produits_favoris")
+}
+
+model MagasinFavori {
+  id             String      @id @default(uuid()) @db.Uuid
+  utilisateur_id String      @map("user_id") @db.Uuid
+  magasin_id     String      @map("store_id") @db.Uuid
+  cree_le        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  magasin        Magasin     @relation(fields: [magasin_id], references: [id], onDelete: Cascade)
+
+  @@unique([utilisateur_id, magasin_id])
+  @@map("magasins_favoris")
+}
+
+model Publication {
+  id              String                   @id @default(uuid()) @db.Uuid
+  auteur_id       String                   @map("author_id") @db.Uuid
+  magasin_id      String?                  @map("store_id") @db.Uuid
+  legende         String?                  @db.Text
+  visibilite      VisibilitePublication    @default(PUBLIC)
+  est_publie      Boolean                  @default(true) @map("is_published")
+  publie_le       DateTime?                @map("published_at") @db.Timestamptz(6)
+  cree_le         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le      DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  supprime_le     DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  auteur          Utilisateur              @relation("AuteurPublication", fields: [auteur_id], references: [id], onDelete: Restrict)
+  magasin         Magasin?                 @relation(fields: [magasin_id], references: [id], onDelete: Cascade)
+  medias          MediaPublication[]
+  commentaires    CommentairePublication[]
+  mentions_j_aime AimePublication[]
+  partages        PartagePublication[]
+
+  @@index([magasin_id, est_publie, publie_le])
+  @@index([auteur_id, cree_le])
+  @@map("publications")
+}
+
+model MediaPublication {
+  id             String      @id @default(uuid()) @db.Uuid
+  publication_id String      @map("post_id") @db.Uuid
+  type           TypeMedia
+  cle_stockage   String      @map("storage_key") @db.VarChar(1024)
+  cle_miniature  String?     @map("thumbnail_key") @db.VarChar(1024)
+  position       Int         @default(0)
+  post           Publication @relation(fields: [publication_id], references: [id], onDelete: Cascade)
+
+  @@index([publication_id, position])
+  @@map("medias_publications")
+}
+
+model CommentairePublication {
+  id             String                   @id @default(uuid()) @db.Uuid
+  publication_id String                   @map("post_id") @db.Uuid
+  utilisateur_id String                   @map("user_id") @db.Uuid
+  parent_id      String?                  @map("parent_id") @db.Uuid
+  contenu        String                   @db.Text
+  cree_le        DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  modifie_le     DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  supprime_le    DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  post           Publication              @relation(fields: [publication_id], references: [id], onDelete: Cascade)
+  utilisateur    Utilisateur              @relation(fields: [utilisateur_id], references: [id], onDelete: Restrict)
+  parent         CommentairePublication?  @relation("ReponsesCommentaire", fields: [parent_id], references: [id], onDelete: Cascade)
+  reponses       CommentairePublication[] @relation("ReponsesCommentaire")
+
+  @@index([publication_id, cree_le])
+  @@map("commentaires_publications")
+}
+
+model AimePublication {
+  id             String      @id @default(uuid()) @db.Uuid
+  publication_id String      @map("post_id") @db.Uuid
+  utilisateur_id String      @map("user_id") @db.Uuid
+  cree_le        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  post           Publication @relation(fields: [publication_id], references: [id], onDelete: Cascade)
+  utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+
+  @@unique([publication_id, utilisateur_id])
+  @@map("aimes_publications")
+}
+
+model AbonnementUtilisateur {
+  id        String      @id @default(uuid()) @db.Uuid
+  abonne_id String      @map("follower_id") @db.Uuid
+  suivi_id  String      @map("followed_id") @db.Uuid
+  cree_le   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  abonne    Utilisateur @relation("Abonnements", fields: [abonne_id], references: [id], onDelete: Cascade)
+  suivi     Utilisateur @relation("Abonnes", fields: [suivi_id], references: [id], onDelete: Cascade)
+
+  @@unique([abonne_id, suivi_id])
+  @@map("abonnements_utilisateurs")
+}
+
+model AbonnementMagasin {
+  id             String      @id @default(uuid()) @db.Uuid
+  utilisateur_id String      @map("user_id") @db.Uuid
+  magasin_id     String      @map("store_id") @db.Uuid
+  cree_le        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  magasin        Magasin     @relation(fields: [magasin_id], references: [id], onDelete: Cascade)
+
+  @@unique([utilisateur_id, magasin_id])
+  @@map("abonnements_magasins")
+}
+
+model PartagePublication {
+  id             String      @id @default(uuid()) @db.Uuid
+  publication_id String      @map("post_id") @db.Uuid
+  utilisateur_id String      @map("user_id") @db.Uuid
+  legende        String?     @db.Text
+  cree_le        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  post           Publication @relation(fields: [publication_id], references: [id], onDelete: Cascade)
+  utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+
+  @@unique([publication_id, utilisateur_id])
+  @@map("partages_publications")
+}
+
+model SessionEssayage {
+  id                  String                @id @default(uuid()) @db.Uuid
+  utilisateur_id      String                @map("user_id") @db.Uuid
+  variante_produit_id String?               @map("product_variant_id") @db.Uuid
+  statut              StatutEssayage        @default(CREE)
+  metadonnees         Json?
+  commencee_le        DateTime              @default(now()) @map("started_at") @db.Timestamptz(6)
+  terminee_le         DateTime?             @map("completed_at") @db.Timestamptz(6)
+  expire_le           DateTime?             @map("expires_at") @db.Timestamptz(6)
+  supprime_le         DateTime?             @map("deleted_at") @db.Timestamptz(6)
+  utilisateur         Utilisateur           @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  productVariant      VarianteProduit?      @relation(fields: [variante_produit_id], references: [id], onDelete: SetNull)
+  fichiers            FichierEssayage[]
+  consentement        ConsentementEssayage?
+
+  @@index([utilisateur_id, commencee_le])
+  @@index([statut, expire_le])
+  @@map("sessions_essayage")
+}
+
+model FichierEssayage {
+  id                    String              @id @default(uuid()) @db.Uuid
+  session_id            String              @map("session_id") @db.Uuid
+  type                  TypeFichierEssayage
+  cle_stockage          String              @map("storage_key") @db.VarChar(1024)
+  type_mime             String              @map("mime_type") @db.VarChar(100)
+  taille_fichier_octets BigInt?             @map("file_size_bytes")
+  cree_le               DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  expire_le             DateTime?           @map("expires_at") @db.Timestamptz(6)
+  supprime_le           DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  session               SessionEssayage     @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id, type])
+  @@index([expire_le])
+  @@map("fichiers_essayage")
+}
+
+model ConsentementEssayage {
+  id                   String          @id @default(uuid()) @db.Uuid
+  session_id           String          @unique @map("session_id") @db.Uuid
+  version_consentement String          @map("consent_version") @db.VarChar(40)
+  objectif             String          @db.VarChar(255)
+  accepte_le           DateTime        @default(now()) @map("accepted_at") @db.Timestamptz(6)
+  retire_le            DateTime?       @map("withdrawn_at") @db.Timestamptz(6)
+  session              SessionEssayage @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@map("consentements_essayage")
+}
+
+model Notification {
+  id             String             @id @default(uuid()) @db.Uuid
+  utilisateur_id String             @map("user_id") @db.Uuid
+  type           TypeNotification
+  titre          String             @db.VarChar(180)
+  contenu        String             @db.Text
+  donnees        Json?
+  statut         StatutNotification @default(PENDING)
+  lu_le          DateTime?          @map("read_at") @db.Timestamptz(6)
+  envoye_le      DateTime?          @map("sent_at") @db.Timestamptz(6)
+  cree_le        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  utilisateur    Utilisateur        @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+
+  @@index([utilisateur_id, statut, cree_le])
+  @@map("notifications")
+}
+
+model PreferenceNotification {
+  id             String            @id @default(uuid()) @db.Uuid
+  utilisateur_id String            @map("user_id") @db.Uuid
+  type           TypeNotification
+  canal          CanalNotification
+  active         Boolean           @default(true)
+  utilisateur    Utilisateur       @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+
+  @@unique([utilisateur_id, type, canal])
+  @@map("preferences_notifications")
+}
+
+model JournalAudit {
+  id                String       @id @default(uuid()) @db.Uuid
+  acteur_id         String?      @map("actor_id") @db.Uuid
+  magasin_id        String?      @map("store_id") @db.Uuid
+  action            String       @db.VarChar(120)
+  type_entite       String       @map("entity_type") @db.VarChar(120)
+  entite_id         String?      @map("entity_id") @db.VarChar(100)
+  adresse_ip        String?      @map("ip_address") @db.VarChar(64)
+  agent_utilisateur String?      @map("user_agent") @db.VarChar(512)
+  metadonnees       Json?
+  cree_le           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  acteur            Utilisateur? @relation(fields: [acteur_id], references: [id], onDelete: SetNull)
+
+  @@index([acteur_id, cree_le])
+  @@index([magasin_id, cree_le])
+  @@index([type_entite, entite_id])
+  @@map("journaux_audit")
+}

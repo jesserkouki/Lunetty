@@ -1,0 +1,104 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [Mehdi]
+  pull_request:
+    branches: [Mehdi]
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  backend:
+    name: Backend (NestJS) - base de données, lint, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    # Base PostgreSQL jetable : créée au début du job, détruite à la fin.
+    # Ces identifiants ne servent qu'ici et sont différents de ceux de ton .env.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: ci_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_user -d ci_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ci_user:ci_password@localhost:5432/ci_db?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+
+      # --- Base de données (Prisma) ---
+      - name: Prisma - valider le schéma
+        run: npx prisma validate
+
+      - name: Prisma - générer le client
+        run: npx prisma generate
+
+      # L'historique contient une migration de traduction qui supprime des
+      # tables/colonnes et ne reconstruit pas tout le schéma Prisma actuel.
+      # Ne pas exécuter cet historique avant sa réparation et validation.
+      # La base PostgreSQL de ce job est jetable : la créer directement depuis
+      # le schéma permet de vérifier que Prisma peut appliquer le modèle sur
+      # PostgreSQL sans toucher à une base persistante.
+      - name: Prisma - créer le schéma sur PostgreSQL de test
+        run: npx prisma db push --skip-generate
+
+      - name: Prisma - vérifier la parité du schéma PostgreSQL
+        # Compare la base jetable au datamodel après db push.
+        run: >-
+          npx prisma migrate diff
+          --from-url "$DATABASE_URL"
+          --to-schema-datamodel prisma/schema.prisma
+          --exit-code
+
+      # --- Code ---
+      - run: npm run lint --if-present
+      - run: npm test --if-present
+      - run: npm run build
+
+  frontend:
+    name: Frontend (Next.js) - lint, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend-cross-platform/webfront
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Frontend-cross-platform/webfront/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint --if-present
+      - run: npm test --if-present
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
