@@ -3,7 +3,7 @@ const TOKEN_KEY = 'lunetty_token';
 
 /** Fired on window when an authenticated request comes back 401 (token expired/invalid). */
 export const AUTH_EXPIRED_EVENT = 'auth:expired';
-
+const SPACE_KEY = 'lunetty_space';
 export type AccountType = 'CLIENT' | 'OPTICIAN';
 
 export type AuthUser = {
@@ -43,6 +43,19 @@ export const setToken = (token: string | null) => {
     else localStorage.removeItem(TOKEN_KEY);
   } catch {}
 };
+
+
+export const getSpace = (): AccountType => {
+  try { return localStorage.getItem(SPACE_KEY) === 'OPTICIAN' ? 'OPTICIAN' : 'CLIENT'; }
+  catch { return 'CLIENT'; }
+};
+export const setSpace = (space: AccountType | null) => {
+  try {
+    if (space) localStorage.setItem(SPACE_KEY, space);
+    else localStorage.removeItem(SPACE_KEY);
+  } catch {}
+};
+
 
 // ---- errors ----
 export class ApiError extends Error {
@@ -135,5 +148,5 @@ export const deactivateAccount = (token: string) =>
 // Later: call the memberships endpoint and return 'OPTICIAN' if the user
 // has an ACTIVE MembreMagasin, otherwise 'CLIENT'.
 export async function resolveAccountType(_token: string): Promise<AccountType> {
-  return 'CLIENT';
+   return getSpace();
 }

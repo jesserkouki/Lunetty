@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   AccountType, ApiError, AuthUser, CurrentUser,
-  fetchMe, getToken, resolveAccountType, setToken, toCurrentUser,
+  fetchMe, getToken, resolveAccountType, setToken, toCurrentUser,setSpace
 } from '@/lib/auth';
 
 type Status = 'loading' | 'guest' | 'authenticated';
@@ -27,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(() => {
     setToken(null);
+    setSpace(null);
     setUser(null);
     setStatus('guest');
   }, []);

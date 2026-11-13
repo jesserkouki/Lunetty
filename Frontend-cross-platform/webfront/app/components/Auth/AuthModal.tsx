@@ -4,6 +4,7 @@ import { Eye, EyeOff, Glasses, Loader2, Store, User, X } from 'lucide-react';
 import {
   AccountType, ApiError, AuthUser,
   login, register, resolveAccountType, setToken,
+  setSpace as persistSpace,
 } from '@/lib/auth';
 
 type Mode = 'login' | 'signup';
@@ -75,12 +76,10 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
         : await login(form.email.trim(), form.password);
 
       setToken(accessToken);
+      persistSpace(space);
       const accountType = await resolveAccountType(accessToken);
 
-      if (!isSignup && isPro && accountType !== 'OPTICIAN') {
-        setToken(null);
-        return setError("Ce compte n'est rattaché à aucun magasin. Utilisez l'Espace Client.");
-      }
+     
       onSuccess(user, accountType);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Une erreur est survenue.');

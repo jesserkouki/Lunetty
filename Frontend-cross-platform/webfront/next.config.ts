@@ -3,7 +3,21 @@ import type { NextConfig } from "next";
 const API_URL = process.env.API_URL ?? "http://backend:3000";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  allowedDevOrigins: ["127.0.0.1", "19x55th5-3001.eun1.devtunnels.ms"],
+  async rewrites() {
+    const apiOrigin = (process.env.LUNETTY_API_PROXY_TARGET ?? "http://localhost:3000")
+      .replace(/\/+$/, "");
+    return [
+      {
+        source: "/api/v1/:path*",
+        destination: `${apiOrigin}/api/v1/:path*`,
+      },
+      {
+        source: "/backend/:path*",
+        destination: `${API_URL}/api/v1/:path*`,
+      },
+    ];
+  },
   experimental: {
     agentFeedback: true,
   },
@@ -16,11 +30,6 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
-  },
-  async rewrites() {
-    return [
-      { source: "/backend/:path*", destination: `${API_URL}/api/v1/:path*` },
-    ];
   },
 };
 
