@@ -78,9 +78,13 @@ const FR_MESSAGES: Record<string, string> = {
   'No supported profile fields were provided': 'Aucune modification à enregistrer.',
 };
 
-function toMessage(status: number, data: any): string {
+function toMessage(status: number, data: unknown): string {
   if (status === 429) return 'Trop de tentatives. Réessayez dans une minute.';
-  const raw = Array.isArray(data?.message) ? data.message[0] : data?.message;
+  const message =
+    data && typeof data === 'object' && 'message' in data
+      ? data.message
+      : undefined;
+  const raw = Array.isArray(message) ? message[0] : message;
   if (typeof raw === 'string') return FR_MESSAGES[raw] ?? raw;
   return 'Une erreur est survenue.';
 }
@@ -142,6 +146,17 @@ export const updateProfile = (token: string, patch: ProfilePatch) =>
 
 export const deactivateAccount = (token: string) =>
   request<{ success: boolean }>('/auth/me', { method: 'DELETE', headers: authed(token) });
+
+export const changePassword = (
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+) =>
+  request<AuthUser>('/auth/change-password', {
+    method: 'POST',
+    headers: authed(token),
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
 
 // The ONE place to change once the store/optician logic is decided.
 // For now every authenticated user is a client.

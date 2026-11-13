@@ -12,6 +12,7 @@ import {
 import { inventoryService } from "../../../services/inventory.service";
 import { storesService } from "../../../services/stores.service";
 import { usersService } from "../../../services/users.service";
+import { useAuth } from "../../../contexts/AuthContext";
 import { AppShell } from "../layout/AppShell";
 import { DataView, Notice, Panel } from "../ui/DataView";
 

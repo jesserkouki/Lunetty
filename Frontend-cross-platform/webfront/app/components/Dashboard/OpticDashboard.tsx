@@ -95,7 +95,7 @@ export default function OpticDashboard({
       value: '5',
       hint: (
         <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold mt-1 block">
-          2 rendez-vous aujourd'hui
+          2 rendez-vous aujourd&apos;hui
         </span>
       ),
     },
@@ -125,7 +125,7 @@ export default function OpticDashboard({
             Tableau de Bord Opticien • {storeName}
           </h1>
           <p className={`text-sm mt-1 ${muted}`}>
-            Gestion de stock modélisé 3D et rendez-vous d'essayage.
+            Gestion de stock modélisé 3D et rendez-vous d&apos;essayage.
           </p>
         </div>
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth, type Portal } from "../../../contexts/AuthContext";
 import { AppShell } from "../layout/AppShell";
 import { DataView, Notice, Panel } from "../ui/DataView";
 import { Form, type Field } from "../ui/Form";

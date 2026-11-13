@@ -73,7 +73,7 @@ export default function UserDashboard({ user, dark, onNavigate, onLogout }: Prop
             Bonjour, {user.prenom}
           </h1>
           <p className={`text-sm mt-1 ${muted}`}>
-            Retrouvez vos réservations et vos essayages en un coup d'œil.
+            Retrouvez vos réservations et vos essayages en un coup d&apos;œil.
           </p>
         </div>
         <button

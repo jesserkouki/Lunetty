@@ -34,9 +34,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Restore session on first load
   useEffect(() => {
-    const token = getToken();
-    if (!token) { setStatus('guest'); return; }
     (async () => {
+      await Promise.resolve();
+      const token = getToken();
+      if (!token) {
+        setStatus('guest');
+        return;
+      }
       try {
         const u = await fetchMe(token);
         signIn(u, await resolveAccountType(token));

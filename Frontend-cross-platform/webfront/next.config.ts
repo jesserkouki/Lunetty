@@ -1,12 +1,13 @@
 import type { NextConfig } from "next";
 
-const API_URL = process.env.API_URL ?? "http://backend:3000";
-
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1", "19x55th5-3001.eun1.devtunnels.ms"],
   async rewrites() {
-    const apiOrigin = (process.env.LUNETTY_API_PROXY_TARGET ?? "http://localhost:3000")
-      .replace(/\/+$/, "");
+    const apiOrigin = (
+      process.env.LUNETTY_API_PROXY_TARGET ??
+      process.env.API_URL ??
+      "http://localhost:3000"
+    ).replace(/\/+$/, "");
     return [
       {
         source: "/api/v1/:path*",
@@ -14,7 +15,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/backend/:path*",
-        destination: `${API_URL}/api/v1/:path*`,
+        destination: `${apiOrigin}/api/v1/:path*`,
       },
     ];
   },
@@ -24,6 +25,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
+    root: process.cwd(),
     rules: {
       "*.css": {
         loaders: ["@tailwindcss/turbopack"],

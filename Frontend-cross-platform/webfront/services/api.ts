@@ -1,3 +1,5 @@
+import { getToken, setToken } from "../lib/auth";
+
 export type JsonRecord = Record<string, unknown>;
 
 const TOKEN_KEY = "lunetty.access-token";
@@ -17,7 +19,7 @@ export class ApiError extends Error {
 
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
-  return window.sessionStorage.getItem(TOKEN_KEY);
+  return window.sessionStorage.getItem(TOKEN_KEY) ?? getToken();
 }
 
 export function setAccessToken(token: string): void {
@@ -27,6 +29,7 @@ export function setAccessToken(token: string): void {
 export function clearAccessToken(): void {
   if (typeof window !== "undefined") {
     window.sessionStorage.removeItem(TOKEN_KEY);
+    setToken(null);
   }
 }
 

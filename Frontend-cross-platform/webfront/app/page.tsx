@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Glasses, Search, User, Store, Camera, Calendar, FileText, Plus,
   MapPin, Clock, ChevronRight, SlidersHorizontal, Star, TrendingUp,
@@ -208,6 +208,19 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
   
   // Carousel State
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const selectSlide = useCallback((index: number) => {
+    const slideIndex = (index + MOCK_PRODUCTS.length) % MOCK_PRODUCTS.length;
+    setCurrentSlideIndex(slideIndex);
+    setSelectedProduct(MOCK_PRODUCTS[slideIndex]);
+  }, []);
+  const isDashboardTab = activeTab === 'user-dashboard' || activeTab === 'optician-dashboard';
+  const renderedTab = isDashboardTab && authStatus !== 'loading'
+    ? authStatus === 'guest'
+      ? 'landing'
+      : currentUser?.accountType === 'OPTICIAN'
+        ? 'optician-dashboard'
+        : 'user-dashboard'
+    : activeTab;
 
   // Geolocation & Filter states
   const [selectedCityFilter, setSelectedCityFilter] = useState('ALL');
@@ -218,7 +231,6 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
   const [frameColor, setFrameColor] = useState('#D4AF37');
   const [lensCoating, setLensCoating] = useState('ANTI_REFLET');
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [simulatedAngle, setSimulatedAngle] = useState(0);
 
   const [filterShape, setFilterShape] = useState('ALL');
   const [filterPrice, setFilterPrice] = useState(1000);
@@ -261,7 +273,7 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
     }
   ];
 
-  const handleCategorySelect = (cat) => {
+  const handleCategorySelect = (cat: (typeof LUXURY_CATEGORIES)[number]) => {
     if (cat.shapeMatch) {
       setFilterShape(cat.shapeMatch);
     } else {
@@ -271,15 +283,16 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
     setActiveTab('catalog');
   };
 
-  const canvasRef = useRef(null);
-  const particleCanvasRef = useRef(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const particleCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Animated Background Light Particles with Fade & Bloom Effect
   useEffect(() => {
     const canvas = particleCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    let animationId;
+    if (!ctx) return;
+    let animationId: number;
 
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
@@ -360,24 +373,20 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
 
   // Auto-play hero carousel every 6 seconds
   useEffect(() => {
-    if (activeTab !== 'landing') return;
+    if (renderedTab !== 'landing') return;
     const carouselTimer = setInterval(() => {
-      setCurrentSlideIndex((prev) => (prev + 1) % MOCK_PRODUCTS.length);
+      selectSlide(currentSlideIndex + 1);
     }, 6000);
     return () => clearInterval(carouselTimer);
-  }, [activeTab]);
-
-  // Keep selectedProduct synchronized with current slide in hero
-  useEffect(() => {
-    setSelectedProduct(MOCK_PRODUCTS[currentSlideIndex]);
-  }, [currentSlideIndex]);
+  }, [currentSlideIndex, renderedTab, selectSlide]);
 
   // 3D Canvas Visual Refinement with Refined Studio Lighting
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    let animationFrameId;
+    if (!ctx) return;
+    let animationFrameId: number;
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -431,7 +440,7 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
       }
 
       // Dynamic Frame math
-      const offset = Math.sin(simulatedAngle) * 16;
+      const offset = Math.sin((performance.now() / 1000) * 0.75) * 16;
       const frameWidth = 250;
       const frameHeight = 82;
       const posX = centerX - frameWidth / 2 + offset;
@@ -491,32 +500,12 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
 
     render();
     return () => cancelAnimationFrame(animationFrameId);
-  }, [frameColor, lensCoating, isCameraActive, simulatedAngle]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSimulatedAngle(prev => prev + 0.03);
-    }, 40);
-    return () => clearInterval(interval);
-  }, []);
+  }, [frameColor, lensCoating, isCameraActive]);
 
 const handleLogout = () => {
   signOut();
   setActiveTab('landing');
 };
-
-// Keep each account type on its own dashboard, and kick guests out
-useEffect(() => {
-  if (authStatus === 'loading') return;
-  const isDash = activeTab === 'user-dashboard' || activeTab === 'optician-dashboard';
-  if (!isDash) return;
-
-  if (authStatus === 'guest') return setActiveTab('landing');
-  if (currentUser) {
-    const home = currentUser.accountType === 'OPTICIAN' ? 'optician-dashboard' : 'user-dashboard';
-    if (activeTab !== home) setActiveTab(home);
-  }
-}, [authStatus, currentUser, activeTab]);
 
   const filteredStores = MOCK_STORES
   
@@ -569,19 +558,19 @@ useEffect(() => {
           }`}>
             <button 
               onClick={() => setActiveTab('landing')} 
-              className={`hover:text-amber-600 dark:hover:text-amber-200 transition-colors ${activeTab === 'landing' ? (themeMode === 'dark' ? 'text-amber-200 font-bold' : 'text-amber-700 font-bold') : ''}`}
+              className={`hover:text-amber-600 dark:hover:text-amber-200 transition-colors ${renderedTab === 'landing' ? (themeMode === 'dark' ? 'text-amber-200 font-bold' : 'text-amber-700 font-bold') : ''}`}
             >
               Accueil
             </button>
             <button 
               onClick={() => setActiveTab('tryon')} 
-              className={`hover:text-amber-600 dark:hover:text-amber-200 transition-colors flex items-center gap-1.5 ${activeTab === 'tryon' ? (themeMode === 'dark' ? 'text-amber-200 font-bold' : 'text-amber-700 font-bold') : ''}`}
+              className={`hover:text-amber-600 dark:hover:text-amber-200 transition-colors flex items-center gap-1.5 ${renderedTab === 'tryon' ? (themeMode === 'dark' ? 'text-amber-200 font-bold' : 'text-amber-700 font-bold') : ''}`}
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-500 dark:text-amber-300" /> Studio 3D
             </button>
             <button 
               onClick={() => setActiveTab('catalog')} 
-              className={`hover:text-amber-600 dark:hover:text-amber-200 transition-colors ${activeTab === 'catalog' ? (themeMode === 'dark' ? 'text-amber-200 font-bold' : 'text-amber-700 font-bold') : ''}`}
+              className={`hover:text-amber-600 dark:hover:text-amber-200 transition-colors ${renderedTab === 'catalog' ? (themeMode === 'dark' ? 'text-amber-200 font-bold' : 'text-amber-700 font-bold') : ''}`}
             >
               Catalogue
             </button>
@@ -672,7 +661,7 @@ useEffect(() => {
       <main className="relative z-10 pb-20 space-y-20">
 
         {/* LANDING VIEW */}
-        {activeTab === 'landing' && (
+        {renderedTab === 'landing' && (
           <div className="space-y-20">
             
             {/* LUXURY CATEGORIES SHELF SECTION */}
@@ -803,7 +792,7 @@ useEffect(() => {
                       themeMode === 'dark' ? 'text-stone-300' : 'text-stone-600'
                     }`}>
                       Conception haut de gamme signée <strong className={themeMode === 'dark' ? 'text-white' : 'text-stone-900'}>{MOCK_PRODUCTS[currentSlideIndex].marque}</strong>. 
-                      Fabriquée en {MOCK_PRODUCTS[currentSlideIndex].material} avec traitement d'optique avancée <span className="text-amber-600 dark:text-amber-200 font-semibold">{MOCK_PRODUCTS[currentSlideIndex].lensCoating}</span>.
+                      Fabriquée en {MOCK_PRODUCTS[currentSlideIndex].material} avec traitement d&apos;optique avancée <span className="text-amber-600 dark:text-amber-200 font-semibold">{MOCK_PRODUCTS[currentSlideIndex].lensCoating}</span>.
                     </p>
 
                     {/* CTA Buttons */}
@@ -936,7 +925,7 @@ useEffect(() => {
                   {MOCK_PRODUCTS.map((item, idx) => (
                     <button
                       key={item.id}
-                      onClick={() => setCurrentSlideIndex(idx)}
+                      onClick={() => selectSlide(idx)}
                       className={`shrink-0 flex items-center gap-3 p-2 px-3 rounded-2xl border transition-all text-left ${
                         currentSlideIndex === idx
                           ? (themeMode === 'dark'
@@ -959,7 +948,7 @@ useEffect(() => {
                   {/* Navigation Arrows */}
                   <div className="flex items-center gap-3 shrink-0">
                     <button 
-                      onClick={() => setCurrentSlideIndex((prev) => (prev - 1 + MOCK_PRODUCTS.length) % MOCK_PRODUCTS.length)}
+                      onClick={() => selectSlide(currentSlideIndex - 1)}
                       className={`p-3 border rounded-2xl transition-all ${
                         themeMode === 'dark'
                           ? 'bg-white/5 hover:bg-white/10 border-white/10 text-stone-300 hover:text-white'
@@ -974,7 +963,7 @@ useEffect(() => {
                       {MOCK_PRODUCTS.map((_, idx) => (
                         <button
                           key={idx}
-                          onClick={() => setCurrentSlideIndex(idx)}
+                          onClick={() => selectSlide(idx)}
                           className={`h-2 rounded-full transition-all ${
                             currentSlideIndex === idx 
                               ? (themeMode === 'dark' ? 'w-8 bg-amber-200' : 'w-8 bg-stone-900') 
@@ -985,7 +974,7 @@ useEffect(() => {
                     </div>
 
                     <button 
-                      onClick={() => setCurrentSlideIndex((prev) => (prev + 1) % MOCK_PRODUCTS.length)}
+                      onClick={() => selectSlide(currentSlideIndex + 1)}
                       className={`p-3 border rounded-2xl transition-all ${
                         themeMode === 'dark'
                           ? 'bg-white/5 hover:bg-white/10 border-white/10 text-stone-300 hover:text-white'
@@ -1259,7 +1248,7 @@ useEffect(() => {
         )}
 
     {/* 3D TRY-ON STUDIO */}
-    {activeTab === 'tryon' && (
+    {renderedTab === 'tryon' && (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -1402,7 +1391,7 @@ useEffect(() => {
                 }`}
               >
                 <Calendar className="w-4 h-4 text-amber-500" />
-                Réserver chez l'Opticien Proche
+                Réserver chez l&apos;Opticien Proche
               </button>
             </div>
           </div>
@@ -1412,7 +1401,7 @@ useEffect(() => {
     )}
 
     {/* CATALOG VIEW */}
-    {activeTab === 'catalog' && (
+    {renderedTab === 'catalog' && (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
@@ -1526,7 +1515,7 @@ useEffect(() => {
 
 
       {/* USER DASHBOARD VIEW */}
-      {activeTab === 'user-dashboard' && currentUser?.accountType === 'CLIENT' && (
+      {renderedTab === 'user-dashboard' && currentUser?.accountType === 'CLIENT' && (
         <UserDashboard
           user={currentUser}
           dark={themeMode === 'dark'}
@@ -1537,7 +1526,7 @@ useEffect(() => {
 
 
     {/* OPTICIAN DASHBOARD VIEW */}
-        {activeTab === 'optician-dashboard' && currentUser?.accountType === 'OPTICIAN' && (
+        {renderedTab === 'optician-dashboard' && currentUser?.accountType === 'OPTICIAN' && (
       <OpticDashboard
         user={currentUser}
         dark={themeMode === 'dark'}
@@ -1550,7 +1539,7 @@ useEffect(() => {
 
 
 {/* AUTHENTICATION MODAL */}
-  <AuthModal 
+  {isAuthModalOpen && <AuthModal
     open={isAuthModalOpen} 
     dark={themeMode === 'dark'} 
     initialMode={authInitialMode}
@@ -1560,7 +1549,7 @@ useEffect(() => {
   setActiveTab(accountType === 'OPTICIAN' ? 'optician-dashboard' : 'user-dashboard');
   setIsAuthModalOpen(false);
 }}
-  />
+  />}
   {/* RESERVATION MODAL */}
   {activeReservationModal && (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
@@ -1571,9 +1560,9 @@ useEffect(() => {
           <X className="w-5 h-5" />
         </button>
         <div>
-          <span className="text-xs font-bold text-amber-600 dark:text-amber-200 uppercase tracking-wider">Réservation d'Essayage 3D</span>
+          <span className="text-xs font-bold text-amber-600 dark:text-amber-200 uppercase tracking-wider">Réservation d&apos;Essayage 3D</span>
           <h2 className={`text-2xl font-bold mt-1 ${themeMode === 'dark' ? 'text-white' : 'text-stone-900'}`}>Chez {selectedProduct.opticianStore}</h2>
-          <p className="text-xs text-stone-500 mt-1">Monture préservée en stock pour 48h sans obligation d'achat.</p>
+          <p className="text-xs text-stone-500 mt-1">Monture préservée en stock pour 48h sans obligation d&apos;achat.</p>
         </div>
 
         <div className={`p-4 rounded-2xl border flex items-center gap-4 ${

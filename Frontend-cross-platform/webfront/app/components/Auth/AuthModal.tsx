@@ -29,16 +29,6 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setMode(initialMode);
-      setSpace('CLIENT');
-      setForm(EMPTY);
-      setError('');
-      setShowPassword(false);
-    }
-  }, [open, initialMode]);
-
-  useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !loading && onClose();
     window.addEventListener('keydown', onKey);
@@ -172,7 +162,7 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
             <p className={`text-[11px] leading-relaxed rounded-2xl px-4 py-3 mb-4 border ${
               dark ? 'bg-amber-200/5 border-amber-200/20 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'
             }`}>
-              Créez d'abord votre compte. Le rattachement de votre magasin se fera ensuite depuis l'espace pro.
+              Créez d&apos;abord votre compte. Le rattachement de votre magasin se fera ensuite depuis l&apos;espace pro.
             </p>
           )}
 
