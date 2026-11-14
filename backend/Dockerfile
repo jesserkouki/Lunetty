@@ -1,6 +1,7 @@
 
 FROM node:22-alpine
 
+
 # Mise à jour de npm
 RUN npm install --global npm@11.21.2
 

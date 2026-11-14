@@ -2,9 +2,11 @@ name: CI/CD
 
 on:
   push:
+
     branches: [kouki]
   pull_request:
     branches: [kouki]
+
 
 concurrency:
   group: ci-cd-${{ github.ref }}
