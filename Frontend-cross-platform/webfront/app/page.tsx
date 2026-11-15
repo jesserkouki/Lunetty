@@ -15,8 +15,11 @@ import HeroVideo from './components/Hero/HeroVideo';
 import Navbar from './components/Navbar/Navbar';
 import Band from './components/Site/SiteBand';
 import Footer from './components/Site/SiteFooter';
-import { HomeSectionsTop, HomeSectionsBottom } from './components/Home/HomeSections';
-// --- MOCK DATABASE ---
+import {
+  HomeSectionsTop,
+  HomeSectionsBottom,
+  type HomeProduct,
+} from './components/Home/HomeSections';// --- MOCK DATABASE ---
 const MOCK_PRODUCTS = [
   {
     id: "p1",
@@ -206,7 +209,9 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
   const [themeMode, setThemeMode] = useState('light');
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(MOCK_PRODUCTS[0]);
+  const [selectedProduct, setSelectedProduct] = useState<HomeProduct>(
+  MOCK_PRODUCTS[0]
+);
   const [cartCount, setCartCount] = useState(2);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeReservationModal, setActiveReservationModal] = useState(false);
