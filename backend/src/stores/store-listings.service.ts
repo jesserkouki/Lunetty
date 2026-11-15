@@ -80,6 +80,29 @@ export class StoreListingsService {
     return paginated(data, total, pagination.page, pagination.limit);
   }
 
+  async listManaged(
+    userId: string,
+    storeId: string,
+    pagination: PaginationDto,
+  ) {
+    await this.authorize(userId, storeId);
+    const where: Prisma.AnnonceMagasinWhereInput = {
+      magasin_id: storeId,
+      supprime_le: null,
+    };
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.annonceMagasin.findMany({
+        where,
+        select: listingSelect,
+        orderBy: { cree_le: 'desc' },
+        skip: pagination.skip,
+        take: pagination.limit,
+      }),
+      this.prisma.annonceMagasin.count({ where }),
+    ]);
+    return paginated(data, total, pagination.page, pagination.limit);
+  }
+
   async findPublic(storeId: string, listingId: string) {
     await this.requireActiveStore(storeId);
     const listing = await this.prisma.annonceMagasin.findFirst({

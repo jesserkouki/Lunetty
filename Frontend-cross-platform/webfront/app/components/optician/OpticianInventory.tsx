@@ -875,38 +875,54 @@ export function OpticianInventory({
                       setEditingLocation(null);
                     }}
                   >
-                    <div className="opt-modal-card inventory-secondary-card" onClick={(event) => event.stopPropagation()}>
-                    <div className="inventory-secondary-header">
-                      <strong>{editingLocation ? "Modifier l’emplacement" : "Ajouter un emplacement"}</strong>
-                      <button
-                        className="opt-modal-close"
-                        type="button"
-                        aria-label="Fermer"
-                        onClick={() => {
-                          setNewLocationOpen(false);
-                          setEditingLocation(null);
-                        }}
-                      >
-                        <IconX height={18} width={18} />
-                      </button>
-                    </div>
-                    <div className="field">
-                      <span>Nom de l’emplacement</span>
-                      <input
-                        autoFocus
-                        value={editingLocation?.nom ?? newLocationName}
-                        onChange={(e) => {
-                          if (editingLocation) {
-                            setEditingLocation({ ...editingLocation, nom: e.target.value });
-                          } else {
-                            setNewLocationName(e.target.value);
-                          }
-                          setNewLocationError("");
-                        }}
-                        placeholder="Ex. : Magasin principal"
-                        maxLength={120}
-                      />
-                    </div>
+                    <div className="opt-modal-card inventory-secondary-card inventory-location-card" onClick={(event) => event.stopPropagation()}>
+                      <div className="inventory-secondary-header">
+                        <div className="inventory-secondary-title">
+                          <div className="opt-icon-bubble">
+                            <IconInventory height={18} width={18} />
+                          </div>
+                          <div>
+                            <h3>{editingLocation ? "Modifier l’emplacement" : "Ajouter un emplacement"}</h3>
+                            <p className="inventory-secondary-subtitle">
+                              {editingLocation
+                                ? "Mettez à jour le nom et le type de ce point de stockage."
+                                : "Créez un point de stockage pour organiser vos articles."}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          className="opt-modal-close"
+                          type="button"
+                          aria-label="Fermer"
+                          onClick={() => {
+                            setNewLocationOpen(false);
+                            setEditingLocation(null);
+                          }}
+                        >
+                          <IconX height={18} width={18} />
+                        </button>
+                      </div>
+                      <div className="inventory-secondary-body">
+                        <div className="field">
+                          <span>
+                            Nom de l’emplacement <span className="inventory-required">*</span>
+                          </span>
+                          <input
+                            autoFocus
+                            required
+                            value={editingLocation?.nom ?? newLocationName}
+                            onChange={(e) => {
+                              if (editingLocation) {
+                                setEditingLocation({ ...editingLocation, nom: e.target.value });
+                              } else {
+                                setNewLocationName(e.target.value);
+                              }
+                              setNewLocationError("");
+                            }}
+                            placeholder="Ex. : Magasin principal"
+                            maxLength={120}
+                          />
+                        </div>
                     <div className="field">
                       <span>Type</span>
                       <div className="inventory-location-select">
@@ -945,11 +961,13 @@ export function OpticianInventory({
                       </div>
                     </div>
                     <button
-                      className="button secondary"
+                      className="inventory-manage-types"
                       type="button"
+                      aria-haspopup="dialog"
+                      aria-expanded={manageTypesOpen}
                       onClick={() => setManageTypesOpen((open) => !open)}
                     >
-                      Gérer les types
+                      Gérer les types personnalisés
                     </button>
                     {manageTypesOpen && typeof document !== "undefined" && createPortal(
                       <div
@@ -1102,83 +1120,90 @@ export function OpticianInventory({
                     {locationCrudError && !manageTypesOpen && (
                       <p className="error-message" role="alert">{locationCrudError}</p>
                     )}
-                    <button
-                      className="button secondary"
-                    disabled={submitting || !(editingLocation?.nom ?? newLocationName).trim()}
-                      onClick={async () => {
-                        setSubmitting(true);
-                        try {
-                        if (editingLocation) {
-                          const input = {
-                            nom: editingLocation.nom.trim(),
-                            ...locationTypeInput(editingLocation.type),
-                          };
-                          const updated = await onUpdateLocation(editingLocation.id, input);
-                          const customTypeId = input.type_personnalise_id;
-                          saveLocationOverride({
-                            ...selectedLocation,
-                            ...input,
-                            ...(updated && typeof updated === "object"
-                              ? (updated as Record<string, unknown>)
-                              : {}),
-                            id: editingLocation.id,
-                            est_actif: true,
-                            type_personnalise: customTypeId
-                              ? activeLocationTypes.find((type) => type.id === customTypeId) ?? null
-                              : null,
-                          });
-                        } else {
-                          const input = {
-                            nom: newLocationName.trim(),
-                            ...locationTypeInput(newLocationType),
-                          };
-                          const created = await onCreateLocation(input);
-                          if (
-                            created &&
-                            typeof created === "object" &&
-                            "id" in created &&
-                            typeof created.id === "string"
-                          ) {
-                            const customTypeId = input.type_personnalise_id;
-                            saveLocationOverride({
-                              ...input,
-                              ...(created as Record<string, unknown>),
-                              id: created.id,
-                              est_actif: true,
-                              type_personnalise: customTypeId
-                                ? activeLocationTypes.find((type) => type.id === customTypeId) ?? null
-                                : null,
-                            });
-                            setSelectedLocationId(created.id);
-                          }
-                        }
-                        setNewLocationOpen(false);
-                        setEditingLocation(null);
-                      } catch (reason) {
-                        setNewLocationError(
-                          reason instanceof Error
-                            ? reason.message
-                            : "Impossible d’enregistrer cet emplacement.",
-                        );
-                        } finally {
-                          setSubmitting(false);
-                        }
-                      }}
-                      type="button"
-                    >
-                      {submitting ? "Enregistrement…" : "Enregistrer"}
-                    </button>
-                    <button
-                      className="button secondary"
-                      type="button"
-                      disabled={submitting}
-                      onClick={() => {
-                        setNewLocationOpen(false);
-                        setEditingLocation(null);
-                      }}
-                    >
-                      Annuler
-                    </button>
+                      </div>
+                      <div className="inventory-secondary-footer">
+                        <button
+                          className="button secondary"
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => {
+                            setNewLocationOpen(false);
+                            setEditingLocation(null);
+                          }}
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          className="button primary"
+                          disabled={submitting || !(editingLocation?.nom ?? newLocationName).trim()}
+                          onClick={async () => {
+                            setSubmitting(true);
+                            try {
+                              if (editingLocation) {
+                                const input = {
+                                  nom: editingLocation.nom.trim(),
+                                  ...locationTypeInput(editingLocation.type),
+                                };
+                                const updated = await onUpdateLocation(editingLocation.id, input);
+                                const customTypeId = input.type_personnalise_id;
+                                saveLocationOverride({
+                                  ...selectedLocation,
+                                  ...input,
+                                  ...(updated && typeof updated === "object"
+                                    ? (updated as Record<string, unknown>)
+                                    : {}),
+                                  id: editingLocation.id,
+                                  est_actif: true,
+                                  type_personnalise: customTypeId
+                                    ? activeLocationTypes.find((type) => type.id === customTypeId) ?? null
+                                    : null,
+                                });
+                              } else {
+                                const input = {
+                                  nom: newLocationName.trim(),
+                                  ...locationTypeInput(newLocationType),
+                                };
+                                const created = await onCreateLocation(input);
+                                if (
+                                  created &&
+                                  typeof created === "object" &&
+                                  "id" in created &&
+                                  typeof created.id === "string"
+                                ) {
+                                  const customTypeId = input.type_personnalise_id;
+                                  saveLocationOverride({
+                                    ...input,
+                                    ...(created as Record<string, unknown>),
+                                    id: created.id,
+                                    est_actif: true,
+                                    type_personnalise: customTypeId
+                                      ? activeLocationTypes.find((type) => type.id === customTypeId) ?? null
+                                      : null,
+                                  });
+                                  setSelectedLocationId(created.id);
+                                }
+                              }
+                              setNewLocationOpen(false);
+                              setEditingLocation(null);
+                            } catch (reason) {
+                              setNewLocationError(
+                                reason instanceof Error
+                                  ? reason.message
+                                  : "Impossible d’enregistrer cet emplacement.",
+                              );
+                            } finally {
+                              setSubmitting(false);
+                            }
+                          }}
+                          type="button"
+                        >
+                          {submitting
+                            ? "Enregistrement…"
+                            : editingLocation
+                              ? "Enregistrer les modifications"
+                              : "Créer l’emplacement"}
+                        </button>
+                      </div>
                     </div>
                   </div>,
                   document.body,
