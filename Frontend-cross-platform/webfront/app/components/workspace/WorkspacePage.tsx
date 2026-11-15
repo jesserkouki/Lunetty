@@ -19,6 +19,7 @@ import { storesService } from "../../../services/stores.service";
 import { usersService } from "../../../services/users.service";
 import { backofficeService } from "../../../services/backoffice.service";
 import { employeeService } from "../../../services/employee.service";
+import { ApiError } from "../../../services/api";
 import { OpticianDashboard } from "../optician/OpticianDashboard";
 import { OpticianOrders } from "../optician/OpticianOrders";
 import { OpticianInventory } from "../optician/OpticianInventory";
@@ -267,7 +268,7 @@ export function WorkspacePage({
               resourceId
                 ? Promise.all([productsService.find(resourceId), productsService.variants(resourceId)])
                   : productsService.list(page),
-                storeId ? storesService.listings(storeId, page) : Promise.resolve(null),
+                storeId ? storesService.managedListings(storeId, page) : Promise.resolve(null),
             ]);
             setData({ catalog, listings });
             break;
@@ -325,7 +326,14 @@ export function WorkspacePage({
             if (storeId) setData({ store: await storesService.manage(storeId) });
             break;
           case "profile":
-            setData({ profile: await opticiansService.me() });
+            try {
+              setData({ profile: await opticiansService.me() });
+            } catch (reason) {
+              if (!(reason instanceof ApiError) || reason.status !== 404) {
+                throw reason;
+              }
+              setData({ profile: null });
+            }
             break;
           default:
             break;
@@ -352,11 +360,11 @@ export function WorkspacePage({
   useEffect(() => {
     if (auth.loading) return;
     if (!auth.user) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
     if (portal !== auth.portal) {
-      router.replace(`/${auth.portal}/dashboard`);
+      router.replace("/");
       return;
     }
     const timer = window.setTimeout(() => void loadData(), 0);

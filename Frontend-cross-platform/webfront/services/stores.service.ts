@@ -74,6 +74,10 @@ export const storesService = {
     }),
   listings: (id: string, page = 1) =>
     apiRequest<Page<JsonRecord>>(`stores/${id}/listings${queryString({ page, limit: 20 })}`),
+  managedListings: (id: string, page = 1) =>
+    apiRequest<Page<JsonRecord>>(
+      `stores/${id}/manage/listings${queryString({ page, limit: 20 })}`,
+    ),
   createListing: (id: string, input: JsonRecord) =>
     apiRequest<JsonRecord>(`stores/${id}/listings`, {
       method: "POST",

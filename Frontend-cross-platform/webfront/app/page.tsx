@@ -1,16 +1,15 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Glasses, Search, User, Store, Camera, Calendar, FileText, Plus,
-  MapPin, Clock, ChevronRight, SlidersHorizontal, Star, TrendingUp,
-  Package, Sparkles, X, Edit3, Trash2, Layers, Phone, Navigation,
-  Crosshair, ArrowUpRight, LogOut
+  Search, Camera, Calendar, MapPin, Clock, ChevronRight,
+  SlidersHorizontal, Star, Sparkles, X, Phone, Navigation,
+  Crosshair, ArrowUpRight
 } from 'lucide-react';
 import AuthModal from './components/Auth/AuthModal';
 import { useAuth } from '@/lib/auth-context';
 
 import UserDashboard from './components/Dashboard/UserDashboard';
-import OpticDashboard from './components/Dashboard/OpticDashboard';
 import HeroVideo from './components/Hero/HeroVideo';
 import Navbar from './components/Navbar/Navbar';
 import Band from './components/Site/SiteBand';
@@ -200,6 +199,7 @@ const MOCK_STORES = [
 ];
 
 export default function App() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('landing');
 const { user: currentUser, status: authStatus, signIn, signOut } = useAuth();
 const userRole = currentUser?.accountType ?? 'GUEST';
@@ -215,6 +215,18 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
   const [cartCount, setCartCount] = useState(2);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeReservationModal, setActiveReservationModal] = useState(false);
+  const navigateToTab = (tab: string) => {
+    if (tab === 'optician-dashboard') {
+      if (currentUser?.accountType === 'OPTICIAN') {
+        router.push('/optician/dashboard');
+      } else if (authStatus === 'guest') {
+        setAuthInitialMode('login');
+        setIsAuthModalOpen(true);
+      }
+      return;
+    }
+    setActiveTab(tab);
+  };
 
   // Carousel State
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -559,7 +571,7 @@ const handleLogout = () => {
         themeMode={themeMode}
         onToggleTheme={() => setThemeMode(prev => prev === 'dark' ? 'light' : 'dark')}
         activeTab={renderedTab}
-        onNavigate={setActiveTab}
+        onNavigate={navigateToTab}
         userRole={userRole}
         userName={currentUser?.name}
         onLogin={() => { setAuthInitialMode('login'); setIsAuthModalOpen(true); }}
@@ -1380,19 +1392,9 @@ const handleLogout = () => {
       )}
 
 
-    {/* OPTICIAN DASHBOARD VIEW */}
-        {renderedTab === 'optician-dashboard' && currentUser?.accountType === 'OPTICIAN' && (
-      <OpticDashboard
-        user={currentUser}
-        dark={themeMode === 'dark'}
-        initialInventory={MOCK_PRODUCTS}
-      />
-    )}
-
-
   </main>
 
-  <Footer dark={themeMode === 'dark'} onNavigate={setActiveTab} />
+  <Footer dark={themeMode === 'dark'} onNavigate={navigateToTab} />
 
 
 {/* AUTHENTICATION MODAL */}
@@ -1403,7 +1405,11 @@ const handleLogout = () => {
     onClose={() => setIsAuthModalOpen(false)}
     onSuccess={(user, accountType) => {
   signIn(user, accountType);
-  setActiveTab(accountType === 'OPTICIAN' ? 'optician-dashboard' : 'user-dashboard');
+  if (accountType === 'OPTICIAN') {
+    router.push('/optician/dashboard');
+  } else {
+    setActiveTab('user-dashboard');
+  }
   setIsAuthModalOpen(false);
 }}
   />}

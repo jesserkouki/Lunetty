@@ -4,13 +4,21 @@ import { StoresController } from './stores.controller';
 import { StoresService } from './stores.service';
 import { StoreLocationsController } from './store-locations.controller';
 import { StoreLocationsService } from './store-locations.service';
-import { StoreListingsController } from './store-listings.controller';
+import {
+  ManagedStoreListingsController,
+  StoreListingsController,
+} from './store-listings.controller';
 import { StoreListingsService } from './store-listings.service';
 import { RneVerificationService } from './rne-verification.service';
 
 @Module({
   imports: [AuthModule],
-  controllers: [StoresController, StoreLocationsController, StoreListingsController],
+  controllers: [
+    StoresController,
+    StoreLocationsController,
+    StoreListingsController,
+    ManagedStoreListingsController,
+  ],
   providers: [
     StoresService,
     StoreLocationsService,

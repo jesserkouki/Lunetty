@@ -107,3 +107,22 @@ export class StoreListingsController {
     );
   }
 }
+
+@Controller('stores/:storeId/manage/listings')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+@ApiTags('Store Listings')
+@ApiParam({ name: 'storeId', format: 'uuid' })
+export class ManagedStoreListingsController {
+  constructor(private readonly listings: StoreListingsService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'List listings for a managed store' })
+  list(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('storeId', ParseUUIDPipe) storeId: string,
+    @Query() pagination: PaginationDto,
+  ) {
+    return this.listings.listManaged(user.id, storeId, pagination);
+  }
+}
