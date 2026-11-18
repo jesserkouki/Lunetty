@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Glasses, Sparkles, Sun, Moon, Menu, X, User, LogOut, ArrowUpRight, Settings } from "lucide-react";
+import { Glasses, Sparkles, Sun, Moon, Menu, X, User, LogOut, ArrowUpRight, Settings, Store } from "lucide-react";
 
 type Props = {
   themeMode: string;
@@ -98,7 +98,7 @@ export default function Navbar({
   const cta = dark
     ? "bg-stone-100 text-stone-950 hover:bg-amber-100"
     : "bg-stone-900 text-white hover:bg-stone-800";
-  const links: NavLink[] = userRole === "CLIENT"
+  const links: NavLink[] = userRole === "CLIENT" || userRole === "OPTICIAN"
     ? [...LINKS, { id: "favorites", label: "Mes favoris" }]
     : LINKS;
 
@@ -216,9 +216,15 @@ export default function Navbar({
                     >
                       <button role="menuitem" onClick={() => go("user-dashboard")}
                         className={`w-full rounded-xl px-3 py-2.5 text-left text-sm flex items-center gap-2 ${idleText}`}>
-                        <User className="w-4 h-4" /> Profil
+                        <User className="w-4 h-4" /> Espace client
                       </button>
-                      {userRole === "CLIENT" && (
+                      {userRole === "OPTICIAN" && (
+                        <button role="menuitem" onClick={() => go("optician-dashboard")}
+                          className={`w-full rounded-xl px-3 py-2.5 text-left text-sm flex items-center gap-2 ${idleText}`}>
+                          <Store className="w-4 h-4" /> Espace professionnel
+                        </button>
+                      )}
+                      {userRole !== "GUEST" && (
                         <button role="menuitem" onClick={() => { setUserMenuOpen(false); onSettings(); }}
                           className={`w-full rounded-xl px-3 py-2.5 text-left text-sm flex items-center gap-2 ${idleText}`}>
                           <Settings className="w-4 h-4" /> Paramètres
@@ -277,12 +283,20 @@ export default function Navbar({
               ) : (
                 <div className="space-y-1">
                   <button
-                    onClick={() => go(userRole === "CLIENT" ? "user-dashboard" : "optician-dashboard")}
+                    onClick={() => go("user-dashboard")}
                     className={`w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold flex items-center gap-2 ${iconBtn}`}
                   >
-                    <User className="w-4 h-4" /> {userName || "Mon compte"}
+                    <User className="w-4 h-4" /> Espace client · {userName || "Mon compte"}
                   </button>
-                  {userRole === "CLIENT" && (
+                  {userRole === "OPTICIAN" && (
+                    <button
+                      onClick={() => go("optician-dashboard")}
+                      className={`w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold flex items-center gap-2 ${iconBtn}`}
+                    >
+                      <Store className="w-4 h-4" /> Espace professionnel
+                    </button>
+                  )}
+                  {userRole !== "GUEST" && (
                     <button
                       onClick={() => { setOpen(false); onSettings(); }}
                       className={`w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold flex items-center gap-2 ${iconBtn}`}

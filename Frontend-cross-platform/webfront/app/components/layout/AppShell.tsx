@@ -282,6 +282,11 @@ export function AppShell({
           </div>
 
           <div className="opt-footer-controls">
+            {portal === "optician" && (
+              <Link className="button secondary full-width" href="/">
+                Espace client
+              </Link>
+            )}
             <button
               className="button secondary full-width opt-logout-btn"
               onClick={logout}

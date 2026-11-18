@@ -16,7 +16,7 @@ export default function FavoriteButton({
   dark,
   returnTab,
 }: Props) {
-  const { user, status } = useAuth();
+  const { status } = useAuth();
   const {
     isFavorite,
     isLoading,
@@ -24,16 +24,12 @@ export default function FavoriteButton({
     toggleFavorite,
   } = useFavorites();
   const active = isFavorite(productId);
-  const clientOnly = status === "authenticated" && user?.accountType !== "CLIENT";
   const disabled =
     status === "loading" ||
     isLoading ||
-    pendingProductIds.has(productId) ||
-    clientOnly;
+    pendingProductIds.has(productId);
 
-  const label = clientOnly
-    ? "Les favoris sont réservés aux clients"
-    : active
+  const label = active
       ? "Retirer des favoris"
       : "Ajouter aux favoris";
 

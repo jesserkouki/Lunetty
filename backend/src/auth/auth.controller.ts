@@ -33,11 +33,17 @@ export class AuthController {
   @ApiOperation({
     summary: 'Synchronize the verified Clerk identity with an application user',
   })
-  synchronizeClerkIdentity(@Headers('authorization') authorization?: string) {
+  synchronizeClerkIdentity(
+    @Headers('authorization') authorization?: string,
+    @Body() body?: { accountType?: unknown },
+  ) {
     if (!authorization?.startsWith('Bearer ')) {
       throw new UnauthorizedException('Bearer Clerk session token is required');
     }
-    return this.clerkAuth.synchronize(authorization.slice(7));
+    return this.clerkAuth.synchronize(
+      authorization.slice(7),
+      body?.accountType,
+    );
   }
 
   @Post('register')
@@ -52,6 +58,7 @@ export class AuthController {
         nom: { type: 'string', maxLength: 100 },
         email: { type: 'string', format: 'email' },
         password: { type: 'string', minLength: 12 },
+        accountType: { type: 'string', enum: ['CLIENT', 'OPTICIAN'] },
       },
     },
   })
@@ -74,6 +81,14 @@ export class AuthController {
   })
   login(@Body() body: unknown) {
     return this.authService.login(body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('account-type')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resolve the authenticated account portal from server data' })
+  getAccountType(@Req() request: AuthenticatedRequest) {
+    return this.authService.accountType(request.user.id);
   }
 
   @UseGuards(JwtAuthGuard)

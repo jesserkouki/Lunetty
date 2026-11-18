@@ -3,9 +3,9 @@ name: CI/CD
 on:
   push:
 
-    branches: [kouki]
+    branches: [Mehdi]
   pull_request:
-    branches: [kouki]
+    branches: [Mehdi]
 
 
 concurrency:

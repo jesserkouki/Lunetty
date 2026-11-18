@@ -39,7 +39,7 @@ function recordShopProfileClick(storeId: string) {
 }
 
 function recordListingClick(product: HomeProduct) {
-  if (!UUID_PATTERN.test(product.storeId) || !product.storeListingId) return;
+  if (!product.storeId || !UUID_PATTERN.test(product.storeId) || !product.storeListingId) return;
   void analyticsService.recordClick({
     storeId: product.storeId,
     type: 'STORE_LISTING',
@@ -252,7 +252,6 @@ export default function App() {
 const { user: currentUser, status: authStatus, signIn, signOut } = useAuth();
   const { error: favoritesError, clearError: clearFavoritesError } = useFavorites();
   const currentUserId = currentUser?.id;
-  const currentUserAccountType = currentUser?.accountType;
   const [activeTab, setActiveTab] = useState(
     currentUser?.accountType === 'CLIENT' ? 'user-dashboard' : 'landing',
   );
@@ -315,15 +314,11 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
   }, []);
 
   useEffect(() => {
-    const accountType = currentUserAccountType;
+    const accountType = currentUser?.accountType;
     const userId = currentUserId;
     let active = true;
     Promise.resolve().then(() => {
       if (!active || authStatus === 'loading' || !userId || !accountType) return;
-      if (accountType !== 'CLIENT') {
-        clearPendingFavorite();
-        return;
-      }
 
       try {
         const returnTab = readPendingFavoriteReturnTab();
@@ -343,7 +338,7 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
     return () => {
       active = false;
     };
-  }, [authStatus, currentUserAccountType, currentUserId]);
+  }, [authStatus, currentUser?.accountType, currentUserId]);
 
   const navigateToTab = (tab: string) => {
     if (tab === 'optician-dashboard') {
@@ -356,12 +351,10 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
       }
       return;
     }
-    if (tab === 'favorites' && currentUser?.accountType !== 'CLIENT') {
-      if (authStatus === 'guest') {
-        persistSpace('CLIENT');
-        setAuthInitialMode('login');
-        setIsAuthModalOpen(true);
-      }
+    if (tab === 'favorites' && authStatus !== 'authenticated') {
+      persistSpace('CLIENT');
+      setAuthInitialMode('login');
+      setIsAuthModalOpen(true);
       return;
     }
     setActiveTab(tab);
@@ -376,14 +369,10 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
   }, []);
   const isDashboardTab = activeTab === 'user-dashboard' || activeTab === 'optician-dashboard';
   const renderedTab = activeTab === 'favorites' &&
-    (authStatus !== 'authenticated' || currentUser?.accountType !== 'CLIENT')
+    authStatus !== 'authenticated'
     ? 'landing'
-    : isDashboardTab && authStatus !== 'loading'
-      ? authStatus === 'guest'
-        ? 'landing'
-        : currentUser?.accountType === 'OPTICIAN'
-          ? 'optician-dashboard'
-          : 'user-dashboard'
+    : isDashboardTab && authStatus === 'guest'
+      ? 'landing'
       : activeTab;
 
   // Geolocation & Filter states
@@ -1565,7 +1554,7 @@ const handleLogout = () => {
       </div>
     )}
 
-      {renderedTab === 'favorites' && currentUser?.accountType === 'CLIENT' && (
+      {renderedTab === 'favorites' && authStatus === 'authenticated' && (
         <FavoritesPage
           dark={themeMode === 'dark'}
           onBrowse={() => setActiveTab('catalog')}
@@ -1577,7 +1566,7 @@ const handleLogout = () => {
       )}
 
       {/* USER DASHBOARD VIEW */}
-      {renderedTab === 'user-dashboard' && currentUser?.accountType === 'CLIENT' && (
+      {renderedTab === 'user-dashboard' && currentUser && (
         <UserDashboard
           user={currentUser}
           dark={themeMode === 'dark'}

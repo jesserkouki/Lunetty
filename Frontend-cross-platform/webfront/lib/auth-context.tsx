@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useAuth as useClerkAuth } from '@clerk/nextjs';
 import {
   AccountType, ApiError, AuthUser, CurrentUser,
-  fetchMe, getToken, resolveAccountType, setToken, syncClerkUser, toCurrentUser, setSpace
+  fetchMe, getSpace, getToken, resolveAccountType, setToken, syncClerkUser, toCurrentUser, setSpace
 } from '@/lib/auth';
 import { setClerkTokenGetter } from '@/services/api';
 
@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthError(null);
         const token = await getClerkToken();
         if (!token) throw new ApiError(401, 'Votre session Clerk a expiré.');
-        const clerkUser = await syncClerkUser(token);
+        const clerkUser = await syncClerkUser(token, getSpace());
         if (active) {
           signInWithClerk(clerkUser, await resolveAccountType(token));
         }

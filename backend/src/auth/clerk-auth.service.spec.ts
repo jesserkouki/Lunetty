@@ -53,6 +53,36 @@ describe('ClerkAuthService', () => {
     );
   });
 
+  it('creates an optician role for a new Clerk pro signup', async () => {
+    const transaction = {
+      utilisateur: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'optician-user' }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn(
+        (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const service = new ClerkAuthService(
+      prisma as unknown as PrismaService,
+      { hash: jest.fn().mockResolvedValue('scrypt$random$hash') } as unknown as PasswordHasher,
+      {
+        verifySessionToken: jest.fn().mockResolvedValue(profile.clerkUserId),
+        getVerifiedProfile: jest.fn().mockResolvedValue(profile),
+      } as unknown as ClerkIdentityService,
+    );
+
+    await service.synchronize('clerk-session-token', 'OPTICIAN');
+    expect(transaction.utilisateur.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ role: 'OPTICIEN' }),
+      }),
+    );
+  });
+
   it('reuses the existing Clerk-linked user without creating a duplicate', async () => {
     const linkedUser = {
       id: 'db-user-1',
