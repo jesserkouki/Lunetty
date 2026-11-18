@@ -3,16 +3,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  Prisma,
-  StatutProduit,
-} from '@prisma/client';
+import { Prisma, StatutProduit } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginated } from '../common/dto/pagination.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ProductsCacheService } from './products-cache.service';
 import {
   productListSelect,
   productSelect,
@@ -35,69 +33,86 @@ const variantSelect = {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: ProductsCacheService,
+  ) {}
 
   async list(query: QueryProductsDto) {
-    const where: Prisma.ProduitWhereInput = {
-      statut: StatutProduit.ACTIVE,
-      supprime_le: null,
-      ...(query.type ? { type: query.type } : {}),
-      ...(query.q
-        ? {
-            OR: [
-              { nom: { contains: query.q, mode: 'insensitive' } },
-              { marque: { contains: query.q, mode: 'insensitive' } },
-              { categorie: { contains: query.q, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.produit.findMany({
-        where,
-        select: productListSelect,
-        orderBy: { cree_le: 'desc' },
-        skip: query.skip,
-        take: query.limit,
-      }),
-      this.prisma.produit.count({ where }),
-    ]);
-    return paginated(
-      data.map((product) => ({ ...product, ...toProductCard(product) })),
-      total,
-      query.page,
-      query.limit,
+    return this.cache.getList(
+      {
+        page: query.page,
+        limit: query.limit,
+        q: query.q ?? '',
+        type: query.type ?? '',
+      },
+      async () => {
+        const where: Prisma.ProduitWhereInput = {
+          statut: StatutProduit.ACTIVE,
+          supprime_le: null,
+          ...(query.type ? { type: query.type } : {}),
+          ...(query.q
+            ? {
+                OR: [
+                  { nom: { contains: query.q, mode: 'insensitive' } },
+                  { marque: { contains: query.q, mode: 'insensitive' } },
+                  { categorie: { contains: query.q, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
+        };
+        const [data, total] = await this.prisma.$transaction([
+          this.prisma.produit.findMany({
+            where,
+            select: productListSelect,
+            orderBy: { cree_le: 'desc' },
+            skip: query.skip,
+            take: query.limit,
+          }),
+          this.prisma.produit.count({ where }),
+        ]);
+        return paginated(
+          data.map((product) => ({ ...product, ...toProductCard(product) })),
+          total,
+          query.page,
+          query.limit,
+        );
+      },
     );
   }
 
   async findPublic(id: string) {
-    const product = await this.prisma.produit.findFirst({
-      where: { id, statut: StatutProduit.ACTIVE, supprime_le: null },
-      select: {
-        ...productSelect,
-        variantes: {
-          where: { est_actif: true },
-          select: {
-            ...variantSelect,
-            caracteristiques_monture: true,
-            caracteristiques_verre: true,
-            caracteristiques_lentille: true,
+    return this.cache.getItem(id, async () => {
+      const product = await this.prisma.produit.findFirst({
+        where: { id, statut: StatutProduit.ACTIVE, supprime_le: null },
+        select: {
+          ...productSelect,
+          variantes: {
+            where: { est_actif: true },
+            select: {
+              ...variantSelect,
+              caracteristiques_monture: true,
+              caracteristiques_verre: true,
+              caracteristiques_lentille: true,
+            },
           },
         },
-      },
+      });
+      if (!product) {
+        throw new NotFoundException('Product not found');
+      }
+      return product;
     });
-    if (!product) {
-      throw new NotFoundException('Product not found');
-    }
-    return product;
   }
 
   async create(input: CreateProductDto) {
     try {
-      return await this.prisma.produit.create({
+      const product = await this.prisma.produit.create({
         data: input,
         select: productSelect,
       });
+      await this.cache.invalidateProduct(product.id);
+      return product;
     } catch (error) {
       if (isUniqueConflict(error)) {
         throw new ConflictException('Product slug is already in use');
@@ -108,11 +123,13 @@ export class ProductsService {
 
   async update(id: string, input: UpdateProductDto) {
     try {
-      return await this.prisma.produit.update({
+      const product = await this.prisma.produit.update({
         where: { id, supprime_le: null },
         data: input,
         select: productSelect,
       });
+      await this.cache.invalidateProduct(id);
+      return product;
     } catch (error) {
       if (isNotFound(error)) {
         throw new NotFoundException('Product not found');
@@ -130,6 +147,7 @@ export class ProductsService {
         where: { id, supprime_le: null },
         data: { statut: StatutProduit.ARCHIVE, supprime_le: new Date() },
       });
+      await this.cache.invalidateProduct(id);
     } catch (error) {
       if (isNotFound(error)) {
         throw new NotFoundException('Product not found');
@@ -162,7 +180,7 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
     try {
-      return await this.prisma.varianteProduit.create({
+      const variant = await this.prisma.varianteProduit.create({
         data: {
           produit_id: productId,
           variantName: input.variantName,
@@ -176,9 +194,13 @@ export class ProductsService {
         },
         select: variantSelect,
       });
+      await this.cache.invalidateProduct(productId);
+      return variant;
     } catch (error) {
       if (isUniqueConflict(error)) {
-        throw new ConflictException('Variant reference or barcode is already in use');
+        throw new ConflictException(
+          'Variant reference or barcode is already in use',
+        );
       }
       throw error;
     }

@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, StatutAnnonce, StatutMagasin, StatutProduit } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
@@ -13,6 +14,7 @@ import { CreateStoreListingDto } from './dto/create-store-listing.dto';
 import { UpdateStoreListingDto } from './dto/update-store-listing.dto';
 import { CreateListingVariantDto } from './dto/create-listing-variant.dto';
 import { UpdateListingVariantDto } from './dto/update-listing-variant.dto';
+import { ProductsCacheService } from '../products/products-cache.service';
 
 const listingSelect = {
   id: true,
@@ -55,6 +57,7 @@ export class StoreListingsService {
     private readonly prisma: PrismaService,
     private readonly storeAuthorization: StoreAuthorizationService,
     private readonly audit: AuditService,
+    @Optional() private readonly productsCache?: ProductsCacheService,
   ) {}
 
   async listPublic(storeId: string, pagination: PaginationDto) {
@@ -130,7 +133,7 @@ export class StoreListingsService {
     });
     if (!product) throw new NotFoundException('Active product not found');
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const listing = await this.prisma.$transaction(async (tx) => {
         const listing = await tx.annonceMagasin.create({
           data: {
             magasin_id: storeId,
@@ -159,6 +162,8 @@ export class StoreListingsService {
         });
         return listing;
       });
+      await this.productsCache?.invalidateProduct(listing.produit_id);
+      return listing;
     } catch (error) {
       if (isUniqueConflict(error)) {
         throw new ConflictException('This product is already listed by the store');
@@ -193,10 +198,16 @@ export class StoreListingsService {
           }
         : {}),
     };
-    return this.prisma.$transaction(async (tx) => {
+    const listing = await this.prisma.$transaction(async (tx) => {
       const before = await tx.annonceMagasin.findFirst({
         where: { id: listingId, magasin_id: storeId, supprime_le: null },
-        select: { id: true, titre_personnalise: true, description_personnalisee: true, statut: true },
+        select: {
+          id: true,
+          produit_id: true,
+          titre_personnalise: true,
+          description_personnalisee: true,
+          statut: true,
+        },
       });
       if (!before) throw new NotFoundException('Store listing not found');
       const updated = await tx.annonceMagasin.updateMany({
@@ -228,6 +239,8 @@ export class StoreListingsService {
       });
       return listing;
     });
+    await this.productsCache?.invalidateProduct(listing.produit_id);
+    return listing;
   }
 
   async addVariant(
@@ -251,7 +264,7 @@ export class StoreListingsService {
       throw new BadRequestException('Compare-at price must be greater than or equal to price');
     }
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const created = await this.prisma.$transaction(async (tx) => {
         const created = await tx.varianteAnnonceMagasin.create({
           data: {
             annonce_id: listingId,
@@ -290,6 +303,8 @@ export class StoreListingsService {
         });
         return created;
       });
+      await this.productsCache?.invalidateProduct(listing.produit_id);
+      return created;
     } catch (error) {
       if (isUniqueConflict(error)) {
         throw new ConflictException('Variant or store SKU is already listed');
@@ -315,7 +330,13 @@ export class StoreListingsService {
         annonce_id: listingId,
         annonce: { magasin_id: storeId, supprime_le: null },
       },
-      select: { id: true, prix: true, devise: true, est_disponible: true },
+      select: {
+        id: true,
+        prix: true,
+        devise: true,
+        est_disponible: true,
+        annonce: { select: { produit_id: true } },
+      },
     });
     if (!existing) throw new NotFoundException('Listing variant not found');
     const price = input.prix ?? Number(existing.prix);
@@ -325,7 +346,7 @@ export class StoreListingsService {
       throw new BadRequestException('Compare-at price must be greater than or equal to price');
     }
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const updated = await this.prisma.$transaction(async (tx) => {
         const updated = await tx.varianteAnnonceMagasin.update({
           where: { id: listingVariantId },
           data: {
@@ -375,6 +396,8 @@ export class StoreListingsService {
         });
         return updated;
       });
+      await this.productsCache?.invalidateProduct(existing.annonce.produit_id);
+      return updated;
     } catch (error) {
       if (isUniqueConflict(error)) {
         throw new ConflictException('Variant or store SKU is already listed');

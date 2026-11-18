@@ -15,6 +15,7 @@ services:
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Définir AUTH_JWT_SECRET dans .env}
       CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-http://localhost:3001}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      PRODUCTS_REDIS_HOST: ${PRODUCTS_REDIS_HOST:-redis}
 
     ports:
       - "3000:3000"
@@ -27,6 +28,8 @@ services:
 
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
     healthcheck:
@@ -88,6 +91,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   backend_uploads:

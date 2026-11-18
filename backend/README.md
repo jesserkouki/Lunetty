@@ -31,6 +31,31 @@
 $ npm install
 ```
 
+### Product read cache
+
+Product list and detail reads can use Redis through the products module only.
+The cache is disabled by default; set these values in the backend environment
+to enable it:
+
+```env
+PRODUCTS_CACHE_ENABLED=true
+PRODUCTS_REDIS_HOST=localhost
+PRODUCTS_REDIS_PORT=6379
+PRODUCTS_REDIS_PASSWORD=
+PRODUCTS_REDIS_TLS=false
+PRODUCTS_CACHE_LIST_TTL_SECONDS=30
+PRODUCTS_CACHE_ITEM_TTL_SECONDS=300
+PRODUCTS_CACHE_REDIS_TIMEOUT_MS=100
+```
+
+In Docker Compose, the backend uses the `redis` service hostname by default.
+Set `PRODUCTS_CACHE_ENABLED=false` and restart the backend to disable it; the
+flag is checked on each cache operation. Product writes, store listing
+price/availability changes, and store status changes invalidate affected
+product reads. Redis failures are logged and bypassed in favor of PostgreSQL.
+Cache hit/miss, lookup timing, and database-load timing are logged by
+`ProductsCacheService`.
+
 ## Authentication and database CRUD
 
 The backend uses a domain-oriented modular monolith. Feature modules expose

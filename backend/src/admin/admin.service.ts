@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   Prisma,
@@ -17,6 +18,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { STORE_PERMISSION_CATALOG } from '../common/guards/store-permissions';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProductsCacheService } from '../products/products-cache.service';
 import {
   AdminDirectoryQueryDto,
   AdminOrdersQueryDto,
@@ -33,6 +35,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    @Optional() private readonly productsCache?: ProductsCacheService,
   ) {}
 
   async advertisements() {
@@ -1014,7 +1017,7 @@ export class AdminService {
       select: { id: true, statut: true },
     });
     if (!store) throw new NotFoundException('Store not found');
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.magasin.update({
         where: { id: storeId },
         data: { statut: status as StatutMagasin },
@@ -1033,6 +1036,10 @@ export class AdminService {
       });
       return updated;
     });
+    if (updated.statut !== store.statut) {
+      await this.productsCache?.invalidateLists();
+    }
+    return updated;
   }
 
   async updateUserStatus(

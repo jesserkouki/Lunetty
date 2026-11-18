@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { ProductsCacheModule } from '../products/products-cache.module';
 import { StoresController } from './stores.controller';
 import { StoresService } from './stores.service';
 import { StoreLocationsController } from './store-locations.controller';
@@ -12,7 +13,7 @@ import { StoreListingsService } from './store-listings.service';
 import { RneVerificationService } from './rne-verification.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ProductsCacheModule],
   controllers: [
     StoresController,
     StoreLocationsController,
