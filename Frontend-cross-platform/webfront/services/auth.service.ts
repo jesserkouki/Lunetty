@@ -2,7 +2,7 @@ import { apiRequest, setAccessToken } from "./api";
 
 export interface User {
   id: string;
-  role: "USER" | "ADMIN" | "SUPER_ADMIN";
+  role: "USER" | "OPTICIEN" | "ADMIN" | "SUPER_ADMIN";
   prenom: string;
   nom: string;
   nom_utilisateur?: string | null;
@@ -33,6 +33,7 @@ export const authService = {
     nom: string;
     email: string;
     password: string;
+    accountType?: "CLIENT" | "OPTICIAN";
   }): Promise<User> {
     const response = await apiRequest<AuthResponse>("auth/register", {
       method: "POST",

@@ -8,7 +8,7 @@ export type AccountType = 'CLIENT' | 'OPTICIAN';
 
 export type AuthUser = {
   id: string;
-  role: 'USER' | 'ADMIN' | 'SUPER_ADMIN';
+  role: 'USER' | 'OPTICIEN' | 'ADMIN' | 'SUPER_ADMIN';
   prenom: string;
   nom: string;
   email: string;
@@ -159,16 +159,23 @@ export const login = (email: string, password: string) =>
     body: JSON.stringify({ email, password }),
   });
 
-export const register = (input: { prenom: string; nom: string; email: string; password: string }) =>
+export const register = (input: {
+  prenom: string;
+  nom: string;
+  email: string;
+  password: string;
+  accountType: AccountType;
+}) =>
   request<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(input) });
 
 export const fetchMe = (token: string) =>
   request<AuthUser>('/auth/me', { headers: authed(token) });
 
-export const syncClerkUser = (token: string) =>
+export const syncClerkUser = (token: string, accountType?: AccountType) =>
   request<AuthUser>('/auth/clerk/sync', {
     method: 'POST',
     headers: authed(token),
+    body: JSON.stringify({ accountType }),
   });
 
 export const updateProfile = (token: string, patch: ProfilePatch) =>
@@ -192,10 +199,9 @@ export const changePassword = (
     body: JSON.stringify({ currentPassword, newPassword }),
   });
 
-// The ONE place to change once the store/optician logic is decided.
-// For now every authenticated user is a client.
-// Later: call the memberships endpoint and return 'OPTICIAN' if the user
-// has an ACTIVE MembreMagasin, otherwise 'CLIENT'.
-export async function resolveAccountType(_token: string): Promise<AccountType> {
-   return getSpace();
+export async function resolveAccountType(token: string): Promise<AccountType> {
+  const result = await request<{ accountType: AccountType }>('/auth/account-type', {
+    headers: authed(token),
+  });
+  return result.accountType;
 }

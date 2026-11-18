@@ -4,7 +4,12 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma, StatutUtilisateur } from '@prisma/client';
+import {
+  Prisma,
+  RolePlateforme,
+  StatutAdhesion,
+  StatutUtilisateur,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtTokenService } from './jwt-token.service';
 import { PasswordHasher } from './password-hasher.service';
@@ -41,6 +46,7 @@ export class AuthService {
     const nom = requiredString(input.nom, 'nom', 100);
     const email = requiredString(input.email, 'email', 255).toLowerCase();
     const password = requiredString(input.password, 'password', 1024);
+    const role = this.registrationRole(input.accountType);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new BadRequestException('A valid email address is required');
     }
@@ -51,6 +57,7 @@ export class AuthService {
     try {
       const user = await this.prisma.utilisateur.create({
         data: {
+          role,
           prenom,
           nom,
           email,
@@ -160,6 +167,39 @@ export class AuthService {
       throw new UnauthorizedException('Account is unavailable');
     }
     return user;
+  }
+
+  async accountType(id: string) {
+    const user = await this.prisma.utilisateur.findFirst({
+      where: { id, supprime_le: null, statut: StatutUtilisateur.ACTIVE },
+      select: {
+        role: true,
+        adhesions: {
+          where: { statut: StatutAdhesion.ACTIVE },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    if (!user) {
+      throw new UnauthorizedException('Account is unavailable');
+    }
+    return {
+      accountType:
+        user.role === RolePlateforme.OPTICIEN || user.adhesions.length > 0
+          ? 'OPTICIAN'
+          : 'CLIENT',
+    } as const;
+  }
+
+  private registrationRole(value: unknown): RolePlateforme {
+    if (value === undefined || value === null || value === 'CLIENT') {
+      return RolePlateforme.USER;
+    }
+    if (value === 'OPTICIAN' || value === 'OPTICIEN') {
+      return RolePlateforme.OPTICIEN;
+    }
+    throw new BadRequestException('accountType must be CLIENT or OPTICIAN');
   }
 
   async updateProfile(id: string, input: unknown) {

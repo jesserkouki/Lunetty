@@ -68,7 +68,6 @@ export function FavoritesProvider({
 }) {
   const { user, status } = useAuth();
   const currentUserId = user?.id;
-  const currentUserAccountType = user?.accountType;
   const [favoriteData, setFavoriteData] = useState<{
     userId: string;
     items: FavoriteProduct[];
@@ -79,17 +78,17 @@ export function FavoritesProvider({
   );
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const isClient =
-    status === "authenticated" && currentUserAccountType === "CLIENT";
+  const isAuthenticatedUser = status === "authenticated" && Boolean(currentUserId);
   const favorites = useMemo(
     () =>
-      isClient && favoriteData && favoriteData.userId === currentUserId
+      isAuthenticatedUser && favoriteData && favoriteData.userId === currentUserId
         ? favoriteData.items
         : [],
-    [currentUserId, favoriteData, isClient],
+    [currentUserId, favoriteData, isAuthenticatedUser],
   );
   const isLoading =
-    status === "loading" || (isClient && loadedUserId !== currentUserId);
+    status === "loading" ||
+    (isAuthenticatedUser && loadedUserId !== currentUserId);
 
   const refresh = useCallback(async () => {
     try {
@@ -110,10 +109,9 @@ export function FavoritesProvider({
     if (status === "loading") return;
     if (
       status !== "authenticated" ||
-      currentUserAccountType !== "CLIENT" ||
       !currentUserId
     ) {
-      if (currentUserAccountType !== "CLIENT") clearPendingFavorite();
+      if (status !== "authenticated") clearPendingFavorite();
       return;
     }
 
@@ -156,7 +154,7 @@ export function FavoritesProvider({
     return () => {
       active = false;
     };
-  }, [currentUserAccountType, currentUserId, status]);
+  }, [currentUserId, status]);
 
   const isFavorite = useCallback(
     (productId: string) =>
@@ -175,12 +173,8 @@ export function FavoritesProvider({
         }
         return;
       }
-      if (
-        status !== "authenticated" ||
-        !user ||
-        user.accountType !== "CLIENT"
-      ) {
-        setError("Les favoris sont réservés aux clients connectés.");
+      if (status !== "authenticated" || !user) {
+        setError("Connectez-vous pour gérer vos favoris.");
         return;
       }
 

@@ -74,6 +74,7 @@ export default function AuthModal({
             nom: form.nom.trim(),
             email: form.email.trim(),
             password: form.password,
+            accountType: space,
           })
         : await login(form.email.trim(), form.password);
 

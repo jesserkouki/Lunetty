@@ -3,7 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma, StatutUtilisateur } from '@prisma/client';
+import { Prisma, RolePlateforme, StatutUtilisateur } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PasswordHasher } from './password-hasher.service';
@@ -40,7 +40,7 @@ export class ClerkAuthService {
     private readonly clerkIdentity: ClerkIdentityService,
   ) {}
 
-  async synchronize(token: string) {
+  async synchronize(token: string, requestedAccountType?: unknown) {
     const clerkUserId =
       await this.clerkIdentity.verifySessionToken(token);
     const profile = await this.clerkIdentity.getVerifiedProfile(clerkUserId);
@@ -135,6 +135,7 @@ export class ClerkAuthService {
             email_verifie_le: new Date(),
             derniere_connexion_le: new Date(),
             statut: StatutUtilisateur.ACTIVE,
+            role: this.clerkRegistrationRole(requestedAccountType),
           },
           select: userSelect,
         });
@@ -155,6 +156,7 @@ export class ClerkAuthService {
               'The Clerk email is already used by another application account',
             );
           }
+
           return this.prisma.utilisateur.findUniqueOrThrow({
             where: { id: linkedUser.id },
             select: userSelect,
@@ -166,6 +168,16 @@ export class ClerkAuthService {
       }
       throw error;
     }
+  }
+
+  private clerkRegistrationRole(value: unknown): RolePlateforme {
+    if (value === undefined || value === null || value === 'CLIENT') {
+      return RolePlateforme.USER;
+    }
+    if (value === 'OPTICIAN' || value === 'OPTICIEN') {
+      return RolePlateforme.OPTICIEN;
+    }
+    throw new ConflictException('Unsupported account type');
   }
 
   private assertActive(user: {

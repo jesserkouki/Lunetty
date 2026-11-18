@@ -3,8 +3,64 @@ import { AuthService } from './auth.service';
 import { JwtTokenService } from './jwt-token.service';
 import { PasswordHasher } from './password-hasher.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RolePlateforme } from '@prisma/client';
 
 describe('AuthService', () => {
+  it.each([
+    ['CLIENT', RolePlateforme.USER],
+    ['OPTICIAN', RolePlateforme.OPTICIEN],
+  ])('registers %s accounts with the matching platform role', async (accountType, role) => {
+    const user = { id: 'new-user', role };
+    const prisma = {
+      utilisateur: { create: jest.fn().mockResolvedValue(user) },
+    };
+    const tokens = { issue: jest.fn().mockReturnValue('access-token') };
+    const service = new AuthService(
+      prisma as unknown as PrismaService,
+      { hash: jest.fn().mockResolvedValue('password-hash') } as unknown as PasswordHasher,
+      tokens as unknown as JwtTokenService,
+    );
+
+    await expect(
+      service.register({
+        prenom: 'Lun',
+        nom: 'User',
+        email: 'lun.user@example.test',
+        password: 'a-secure-password-27',
+        accountType,
+      }),
+    ).resolves.toMatchObject({ user, accessToken: 'access-token' });
+    expect(prisma.utilisateur.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ role }),
+      }),
+    );
+  });
+
+  it.each([
+    [RolePlateforme.OPTICIEN, [], 'OPTICIAN'],
+    [RolePlateforme.USER, [{ id: 'active-membership' }], 'OPTICIAN'],
+    [RolePlateforme.USER, [], 'CLIENT'],
+  ])(
+    'resolves %s with memberships %p to the %s portal',
+    async (role, adhesions, accountType) => {
+      const prisma = {
+        utilisateur: {
+          findFirst: jest.fn().mockResolvedValue({ role, adhesions }),
+        },
+      };
+      const service = new AuthService(
+        prisma as unknown as PrismaService,
+        {} as PasswordHasher,
+        {} as JwtTokenService,
+      );
+
+      await expect(service.accountType('user-id')).resolves.toEqual({
+        accountType,
+      });
+    },
+  );
+
   it('replaces the temporary password and clears the required-change flag', async () => {
     const user = {
       id: 'employee-id',
