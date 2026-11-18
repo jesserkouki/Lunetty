@@ -266,6 +266,7 @@ enum StatutAvis {
   @@map("ReviewStatus")
 }
 
+
 enum VisibilitePublication {
   PUBLIC
   ABONNES         @map("FOLLOWERS")
@@ -376,6 +377,10 @@ model Utilisateur {
   mouvements_stock                MouvementStock[]
   changements_statut_commande     HistoriqueStatutCommande[]
   annonces_creees                 AnnonceMagasin[]           @relation("CreateurAnnonce")
+  plateforme_abonnement           AttributionPlanPlateforme? @relation("UtilisateurPlan")
+  utilisations_ia                 UtilisationIA[]
+  campagnes_publicitaires       CampagnePublicitaire[] @relation("AuteurCampagnePublicitaire")
+  publicites_creees              PublicitePlateforme[] @relation("AuteurPublicitePlateforme")
 
   @@index([statut, supprime_le])
   @@map("utilisateurs")
@@ -409,34 +414,37 @@ model ProfilOpticien {
 }
 
 model Magasin {
-  id                   String                   @id @default(uuid()) @db.Uuid
-  nom                  String                   @db.VarChar(160)
-  slug                 String                   @unique @map("identifiant_url") @db.VarChar(180)
-  description          String?                  @db.Text
-  url_logo             String?                  @map("logo_url") @db.VarChar(2048)
-  url_image_couverture String?                  @map("cover_image_url") @db.VarChar(2048)
-  email                String?                  @db.VarChar(255)
-  telephone            String?                  @map("phone") @db.VarChar(30)
-  url_site_web         String?                  @map("website_url") @db.VarChar(2048)
-  code_enregistrement  String?                  @unique @map("registration_code") @db.VarChar(100)
-  statut               StatutMagasin            @default(BROUILLON) @map("status")
-  fuseau_horaire       String                   @default("Africa/Tunis") @map("timezone") @db.VarChar(80)
-  devise               String                   @default("TND") @map("currency") @db.Char(3)
-  cree_le              DateTime                 @default(now()) @db.Timestamptz(6)
-  modifie_le           DateTime                 @updatedAt @db.Timestamptz(6)
-  supprime_le          DateTime?                @db.Timestamptz(6)
-  adhesions            MembreMagasin[]
-  adresses             Adresse[]
-  emplacements         EmplacementMagasin[]
-  types_emplacements   TypeEmplacementMagasin[]
-  annonces             AnnonceMagasin[]
-  commandes            Commande[]
-  rendez_vous          RendezVous[]
-  avis                 AvisMagasin[]
-  favoris              MagasinFavori[]
-  posts                Publication[]
-  abonnes              AbonnementMagasin[]
-  ordonnances          Ordonnance[]             @relation("MagasinPrescripteur")
+  id                    String                     @id @default(uuid()) @db.Uuid
+  nom                   String                     @db.VarChar(160)
+  slug                  String                     @unique @map("identifiant_url") @db.VarChar(180)
+  description           String?                    @db.Text
+  url_logo              String?                    @map("logo_url") @db.VarChar(2048)
+  url_image_couverture  String?                    @map("cover_image_url") @db.VarChar(2048)
+  email                 String?                    @db.VarChar(255)
+  telephone             String?                    @map("phone") @db.VarChar(30)
+  url_site_web          String?                    @map("website_url") @db.VarChar(2048)
+  code_enregistrement   String?                    @unique @map("registration_code") @db.VarChar(100)
+  statut                StatutMagasin              @default(BROUILLON) @map("status")
+  fuseau_horaire        String                     @default("Africa/Tunis") @map("timezone") @db.VarChar(80)
+  devise                String                     @default("TND") @map("currency") @db.Char(3)
+  cree_le               DateTime                   @default(now()) @db.Timestamptz(6)
+  modifie_le            DateTime                   @updatedAt @db.Timestamptz(6)
+  supprime_le           DateTime?                  @db.Timestamptz(6)
+  adhesions             MembreMagasin[]
+  adresses              Adresse[]
+  emplacements          EmplacementMagasin[]
+  types_emplacements    TypeEmplacementMagasin[]
+  annonces              AnnonceMagasin[]
+  commandes             Commande[]
+  rendez_vous           RendezVous[]
+  avis                  AvisMagasin[]
+  favoris               MagasinFavori[]
+  posts                 Publication[]
+  abonnes               AbonnementMagasin[]
+  ordonnances           Ordonnance[]               @relation("MagasinPrescripteur")
+  plateforme_abonnement AttributionPlanPlateforme? @relation("MagasinPlan")
+  utilisations_ia       UtilisationIA[]
+  clics                 ClicMagasin[]
 
   @@index([statut, supprime_le])
   @@map("magasins")
@@ -641,6 +649,7 @@ model AnnonceMagasin {
   produit                   Produit                  @relation(fields: [produit_id], references: [id], onDelete: Restrict)
   cree_par                  Utilisateur?             @relation("CreateurAnnonce", fields: [cree_par_id], references: [id], onDelete: SetNull)
   variantes                 VarianteAnnonceMagasin[]
+  clics                     ClicMagasin[]
 
   @@unique([magasin_id, produit_id])
   @@index([magasin_id, statut, supprime_le])
@@ -1194,4 +1203,134 @@ model JournalAudit {
   @@index([type_entite, entite_id])
   @@index([action, cree_le])
   @@map("journaux_audit")
+}
+
+model PlanPlateforme {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  code               String                      @unique @db.VarChar(60)
+  nom                String                      @db.VarChar(100)
+  description        String?                     @db.Text
+  modules            Json                        @default("[]")
+  max_employes       Int?                        @map("max_employees")
+  max_annonces       Int?                        @map("max_listings")
+  tokens_ia_mensuels Int?                        @map("monthly_ai_tokens")
+  actif              Boolean                     @default(true) @map("active")
+  cree_le            DateTime                    @default(now()) @db.Timestamptz(6)
+  modifie_le         DateTime                    @updatedAt @db.Timestamptz(6)
+  attributions       AttributionPlanPlateforme[]
+
+  @@map("plans_plateforme")
+}
+
+model AttributionPlanPlateforme {
+  id              String         @id @default(uuid()) @db.Uuid
+  plan_id         String         @db.Uuid
+  magasin_id      String?        @unique @db.Uuid
+  utilisateur_id  String?        @unique @db.Uuid
+  attribue_par_id String?        @db.Uuid
+  attribue_le     DateTime       @default(now()) @db.Timestamptz(6)
+  plan            PlanPlateforme @relation(fields: [plan_id], references: [id], onDelete: Restrict)
+  magasin         Magasin?       @relation("MagasinPlan", fields: [magasin_id], references: [id], onDelete: Cascade)
+  utilisateur     Utilisateur?   @relation("UtilisateurPlan", fields: [utilisateur_id], references: [id], onDelete: Cascade)
+
+  @@index([plan_id])
+  @@map("attributions_plans_plateforme")
+}
+
+model UtilisationIA {
+  id             String       @id @default(uuid()) @db.Uuid
+  magasin_id     String?      @db.Uuid
+  utilisateur_id String?      @db.Uuid
+  fournisseur    String       @db.VarChar(60)
+  modele         String       @db.VarChar(120)
+  jetons_entree  Int?         @map("input_tokens")
+  jetons_sortie  Int?         @map("output_tokens")
+  cree_le        DateTime     @default(now()) @db.Timestamptz(6)
+  magasin        Magasin?     @relation(fields: [magasin_id], references: [id], onDelete: SetNull)
+  utilisateur    Utilisateur? @relation(fields: [utilisateur_id], references: [id], onDelete: SetNull)
+
+  @@index([magasin_id, cree_le])
+  @@index([utilisateur_id, cree_le])
+  @@map("utilisations_ia")
+}
+
+model ClicMagasin {
+  id         String          @id @default(uuid()) @db.Uuid
+  magasin_id String          @db.Uuid
+  annonce_id String?         @db.Uuid
+  type       String          @db.VarChar(30)
+  cree_le    DateTime        @default(now()) @db.Timestamptz(6)
+  magasin    Magasin         @relation(fields: [magasin_id], references: [id], onDelete: Cascade)
+  annonce    AnnonceMagasin? @relation(fields: [annonce_id], references: [id], onDelete: SetNull)
+
+  @@index([magasin_id, cree_le])
+  @@index([annonce_id, cree_le])
+  @@map("clics_magasins")
+}
+
+model ParametresPlateforme {
+  id                         String   @id @default("global") @db.VarChar(20)
+  inscriptions_magasins      Boolean  @default(true) @map("store_registrations_enabled")
+  publicites_activees        Boolean  @default(true) @map("advertisements_enabled")
+  modifie_par_id             String?  @map("updated_by_id") @db.Uuid
+  cree_le                    DateTime @default(now()) @db.Timestamptz(6)
+  modifie_le                 DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("parametres_plateforme")
+}
+
+model CampagnePublicitaire {
+  id                String               @id @default(uuid()) @db.Uuid
+  nom               String               @db.VarChar(160)
+  statut            String               @default("DRAFT") @db.VarChar(20)
+  public_cible      String?              @map("target_audience") @db.VarChar(80)
+  lieu_cible        String?              @map("target_location") @db.VarChar(160)
+  date_debut        DateTime?            @map("starts_at") @db.Timestamptz(6)
+  date_fin          DateTime?            @map("ends_at") @db.Timestamptz(6)
+  budget            Decimal?             @db.Decimal(12, 3)
+  notes_internes    String?              @map("internal_notes") @db.Text
+  cree_par_id       String?              @map("created_by_id") @db.Uuid
+  cree_le           DateTime             @default(now()) @db.Timestamptz(6)
+  modifie_le        DateTime             @updatedAt @db.Timestamptz(6)
+  cree_par          Utilisateur?         @relation("AuteurCampagnePublicitaire", fields: [cree_par_id], references: [id], onDelete: SetNull)
+  publicites        PublicitePlateforme[]
+
+  @@index([statut, date_debut, date_fin])
+  @@map("campagnes_publicitaires")
+}
+
+model PublicitePlateforme {
+  id                String                    @id @default(uuid()) @db.Uuid
+  campagne_id       String?                   @db.Uuid
+  titre             String                    @db.VarChar(160)
+  description       String?                   @db.Text
+  url_image         String?                   @map("image_url") @db.VarChar(2048)
+  url_destination   String                    @map("destination_url") @db.VarChar(2048)
+  annonceur         String                    @db.VarChar(160)
+  type              String                    @db.VarChar(40)
+  statut            String                    @default("DRAFT") @db.VarChar(20)
+  date_debut        DateTime?                 @map("starts_at") @db.Timestamptz(6)
+  date_fin          DateTime?                 @map("ends_at") @db.Timestamptz(6)
+  notes_internes    String?                   @map("internal_notes") @db.Text
+  cree_par_id       String?                   @map("created_by_id") @db.Uuid
+  cree_le           DateTime                  @default(now()) @db.Timestamptz(6)
+  modifie_le        DateTime                  @updatedAt @db.Timestamptz(6)
+  campagne          CampagnePublicitaire?     @relation(fields: [campagne_id], references: [id], onDelete: SetNull)
+  cree_par          Utilisateur?              @relation("AuteurPublicitePlateforme", fields: [cree_par_id], references: [id], onDelete: SetNull)
+  evenements        EvenementPublicite[]
+
+  @@index([statut, date_debut, date_fin])
+  @@index([campagne_id])
+  @@map("publicites_plateforme")
+}
+
+model EvenementPublicite {
+  id            String             @id @default(uuid()) @db.Uuid
+  publicite_id  String             @db.Uuid
+  type          String             @db.VarChar(20)
+  cree_le       DateTime           @default(now()) @db.Timestamptz(6)
+  publicite     PublicitePlateforme @relation(fields: [publicite_id], references: [id], onDelete: Restrict)
+
+  @@index([publicite_id, type, cree_le])
+  @@map("evenements_publicites")
 }

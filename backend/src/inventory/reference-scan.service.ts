@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import sharp from 'sharp';
 
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
@@ -37,7 +38,12 @@ export interface ScannedFrameReference {
 
 @Injectable()
 export class ReferenceScanService {
-  async scan(file: ReferenceScanUpload): Promise<{
+  constructor(private readonly prisma?: PrismaService) {}
+
+  async scan(
+    file: ReferenceScanUpload,
+    usageContext?: { userId: string; storeId: string },
+  ): Promise<{
     reference: ScannedFrameReference;
   }> {
     if (file.buffer.length > MAX_IMAGE_BYTES) {
@@ -56,10 +62,23 @@ export class ReferenceScanService {
     const imageSets = await prepareImages(file.buffer);
     const model = process.env.GROQ_VISION_MODEL?.trim() || 'qwen/qwen3.8-27b';
 
-    const responseText = await this.requestGroq(apiKey, imageSets, model);
+    const completion = await this.requestGroq(apiKey, imageSets, model);
+    if (usageContext && this.prisma) {
+      await this.prisma.utilisationIA.create({
+        data: {
+          magasin_id: usageContext.storeId,
+          utilisateur_id: usageContext.userId,
+          fournisseur: 'groq',
+          modele: model,
+          jetons_entree: completion.inputTokens,
+          jetons_sortie: completion.outputTokens,
+        },
+        select: { id: true },
+      });
+    }
     let result: unknown;
     try {
-      let jsonText = responseText.trim();
+      let jsonText = completion.content.trim();
       if (jsonText.startsWith('```')) {
         jsonText = jsonText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
       }
@@ -83,7 +102,11 @@ export class ReferenceScanService {
     apiKey: string,
     imageSets: string[][],
     model: string,
-  ): Promise<string> {
+  ): Promise<{
+    content: string;
+    inputTokens: number | null;
+    outputTokens: number | null;
+  }> {
     let imageSetIndex = 0;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       let response: Response;
@@ -134,7 +157,13 @@ export class ReferenceScanService {
 
       const body: unknown = await response.json().catch(() => undefined);
       const content = getCompletionContent(body);
-      if (content) return content;
+      if (content) {
+        return {
+          content,
+          inputTokens: getUsageTokens(body, 'prompt_tokens'),
+          outputTokens: getUsageTokens(body, 'completion_tokens'),
+        };
+      }
       throw new ServiceUnavailableException(
         'Le service de lecture photo n’a pas renvoyé de résultat exploitable.',
       );
@@ -222,6 +251,16 @@ function getCompletionContent(body: unknown): string | null {
   const content = (message as { content?: unknown }).content;
   return typeof content === 'string' && content.trim()
     ? content.trim()
+    : null;
+}
+
+function getUsageTokens(body: unknown, key: 'prompt_tokens' | 'completion_tokens') {
+  if (!body || typeof body !== 'object') return null;
+  const usage = (body as { usage?: unknown }).usage;
+  if (!usage || typeof usage !== 'object') return null;
+  const count = (usage as Record<string, unknown>)[key];
+  return Number.isInteger(count) && (count as number) >= 0
+    ? (count as number)
     : null;
 }
 

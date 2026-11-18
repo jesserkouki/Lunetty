@@ -14,7 +14,28 @@ import HeroVideo from './components/Hero/HeroVideo';
 import Navbar from './components/Navbar/Navbar';
 import Band from './components/Site/SiteBand';
 import Footer from './components/Site/SiteFooter';
-import { HomeSectionsTop, HomeSectionsBottom } from './components/Home/HomeSections';
+import { HomeSectionsTop, HomeSectionsBottom, type HomeProduct } from './components/Home/HomeSections';
+import { analyticsService } from '@/services/analytics.service';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function recordShopProfileClick(storeId: string) {
+  if (!UUID_PATTERN.test(storeId)) return;
+  void analyticsService.recordClick({ storeId, type: 'STORE_PROFILE' }).catch((error: unknown) => {
+    console.error('Unable to record shop profile click', error);
+  });
+}
+
+function recordListingClick(product: HomeProduct) {
+  if (!UUID_PATTERN.test(product.storeId) || !product.storeListingId) return;
+  void analyticsService.recordClick({
+    storeId: product.storeId,
+    type: 'STORE_LISTING',
+    listingId: product.storeListingId,
+  }).catch((error: unknown) => {
+    console.error('Unable to record shop listing click', error);
+  });
+}
 // --- MOCK DATABASE ---
 const MOCK_PRODUCTS = [
   {
@@ -206,7 +227,7 @@ const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('logi
   const [themeMode, setThemeMode] = useState('light');
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(MOCK_PRODUCTS[0]);
+  const [selectedProduct, setSelectedProduct] = useState<HomeProduct>(MOCK_PRODUCTS[0]);
   const [cartCount, setCartCount] = useState(2);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeReservationModal, setActiveReservationModal] = useState(false);
@@ -936,8 +957,8 @@ const handleLogout = () => {
             <HomeSectionsTop
               themeMode={themeMode}
               products={MOCK_PRODUCTS}
-              onTryOn={(p) => { setSelectedProduct(p); setActiveTab('tryon'); }}
-              onReserve={(p) => { setSelectedProduct(p); setActiveReservationModal(true); }}
+              onTryOn={(p) => { recordListingClick(p); setSelectedProduct(p); setActiveTab('tryon'); }}
+              onReserve={(p) => { recordListingClick(p); setSelectedProduct(p); setActiveReservationModal(true); }}
               onCatalog={() => setActiveTab('catalog')}
             />
 
@@ -1071,6 +1092,7 @@ const handleLogout = () => {
 
                           <button
                             onClick={() => {
+                              recordShopProfileClick(store.id);
                               setSelectedProduct(MOCK_PRODUCTS.find(p => p.storeId === store.id) || MOCK_PRODUCTS[0]);
                               setActiveReservationModal(true);
                             }}
@@ -1100,10 +1122,10 @@ const handleLogout = () => {
               themeMode={themeMode}
               products={MOCK_PRODUCTS}
               stores={MOCK_STORES}
-              onTryOn={(p) => { setSelectedProduct(p); setActiveTab('tryon'); }}
-              onReserve={(p) => { setSelectedProduct(p); setActiveReservationModal(true); }}
+              onTryOn={(p) => { recordListingClick(p); setSelectedProduct(p); setActiveTab('tryon'); }}
+              onReserve={(p) => { recordListingClick(p); setSelectedProduct(p); setActiveReservationModal(true); }}
               onCatalog={() => setActiveTab('catalog')}
-              onStore={(id) => { setSelectedProduct(MOCK_PRODUCTS.find(p => p.storeId === id) || MOCK_PRODUCTS[0]); setActiveReservationModal(true); }}
+              onStore={(id) => { recordShopProfileClick(id); setSelectedProduct(MOCK_PRODUCTS.find(p => p.storeId === id) || MOCK_PRODUCTS[0]); setActiveReservationModal(true); }}
             />
 
           </div>
@@ -1359,7 +1381,7 @@ const handleLogout = () => {
                     }`}>
                       <span className={`text-lg font-bold ${themeMode === 'dark' ? 'text-white' : 'text-stone-900'}`}>{product.prix.toFixed(3)} <span className="text-xs text-amber-600 dark:text-amber-200">TND</span></span>
                       <button
-                        onClick={() => { setSelectedProduct(product); setActiveReservationModal(true); }}
+                        onClick={() => { recordListingClick(product); setSelectedProduct(product); setActiveReservationModal(true); }}
                         className={`px-4 py-2.5 font-bold text-xs rounded-xl transition-colors uppercase tracking-wider ${
                           themeMode === 'dark' ? 'bg-stone-100 text-stone-950 hover:bg-amber-100' : 'bg-stone-900 text-white hover:bg-stone-800'
                         }`}
@@ -1400,7 +1422,9 @@ const handleLogout = () => {
     onClose={() => setIsAuthModalOpen(false)}
     onSuccess={(user, accountType) => {
   signIn(user, accountType);
-  if (accountType === 'OPTICIAN') {
+    if (user.role === 'SUPER_ADMIN') {
+      router.push('/admin');
+    } else if (accountType === 'OPTICIAN') {
     router.push('/optician/dashboard');
   } else {
     setActiveTab('user-dashboard');

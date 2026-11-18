@@ -10,6 +10,7 @@ export type HomeProduct = {
   id: string; nom: string; marque: string; categorie: string; prix: number; devise: string;
   rating: number; reviewsCount: number; frameShape: string; imageUrl: string;
   lensCoating: string; opticianStore: string; storeId: string; city: string;
+  storeListingId?: string;
 };
 export type HomeStore = {
   id: string; nom: string; ville: string; quartier: string; rating: number; reviewsCount: number;

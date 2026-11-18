@@ -27,7 +27,7 @@ async function bootstrap() {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Lunetty API')
     .setDescription(
-      'Lunetty business API. Administrative operations require a SUPER_ADMIN bearer token.',
+      'Lunetty business API. Platform administration requires an active SUPER_ADMIN bearer token.',
     )
     .setVersion('1.0')
     .addBearerAuth()

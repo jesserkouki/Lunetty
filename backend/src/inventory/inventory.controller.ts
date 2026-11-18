@@ -113,7 +113,7 @@ export class InventoryController {
     if (!file) {
       throw new BadRequestException('Aucune photo reçue.');
     }
-    return this.referenceScan.scan(file);
+    return this.referenceScan.scan(file, { userId: user.id, storeId });
   }
 
   @Get(':stockId')
