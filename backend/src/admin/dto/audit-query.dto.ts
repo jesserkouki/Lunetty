@@ -14,4 +14,13 @@ export class AuditQueryDto extends PaginationDto {
   @IsOptional()
   @IsUUID()
   magasin_id?: string;
+
+  @IsOptional()
+  @IsUUID()
+  utilisateur_id?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  entite_id?: string;
 }

@@ -4,6 +4,69 @@ Base prefix is `/api/v1`; all listed routes require a bearer access token.
 All access is additionally scoped to the `storeId` in the path. Supplying a
 different store ID does not grant access.
 
+## Platform administration
+
+The Super Admin console is available at `/admin`. Every `/admin/*` endpoint
+requires an active `SUPER_ADMIN` bearer account; ordinary `ADMIN` accounts are
+denied by the backend guard. Account status remains the separate
+`ACTIVE` / `SUSPENDED` lifecycle field. Mutating status, plan, campaign,
+advertisement, and emergency-control requests require a reason recorded in the
+append-only audit journal.
+
+- `GET /admin/overview` returns aggregate client, optician, shop, employee,
+  order, click, monthly AI-token, and audit-event totals.
+- `GET /admin/stores?page=&limit=&search=` lists non-deleted shops, active
+  owners, employee/listing/order totals, click totals, AI tokens, and assigned
+  plans.
+- `GET /admin/users?page=&limit=&search=&kind=clients|opticians|employees`
+  lists account status, shop memberships, orders, plan assignment, and AI
+  usage. Password hashes and credential fields are never selected.
+- `GET /admin/orders?page=&limit=&search=` lists cross-shop order summaries.
+- `GET /admin/audit-logs?page=&limit=&type_entite=&acteur_id=&magasin_id=&utilisateur_id=&entite_id=`
+  returns audit identity, action/entity, before/after snapshots, reason, and
+  timestamp.
+- `GET /admin/clicks` and `GET /admin/ai-usage` show per-shop click categories
+  and current-month AI usage by shop and user.
+- `GET|POST /admin/plans`, `PATCH /admin/plans/:planId`,
+  `PUT|DELETE /admin/stores/:storeId/plan`, and
+  `PUT|DELETE /admin/users/:userId/plan` manage feature modules,
+  employee/listing caps, monthly AI-token allowances, and plan assignments.
+- `PATCH /admin/stores/:storeId/status` and
+  `PATCH /admin/users/:userId/status` change existing platform lifecycle
+  statuses. These changes are audit-recorded.
+- `POST /analytics/clicks` accepts `{ storeId, type, listingId? }`, where type
+  is `STORE_PROFILE` or `STORE_LISTING`. It validates active shop/listing
+  ownership and is rate-limited. No historic click records are fabricated.
+- `GET|POST /admin/advertisements`, `PATCH /admin/advertisements/:id`
+  manage ad creatives; setting status to `ARCHIVED` archives rather than
+  deleting the creative.
+- `GET|POST /admin/advertisement-campaigns`,
+  `PATCH /admin/advertisement-campaigns/:id` manage campaign metadata,
+  targeting, schedule, budget, status, and internal notes.
+- `GET|PATCH /admin/platform-controls` reads and updates the shop-registration
+  and advertisement-enable emergency switches. Disabling shop registrations
+  is enforced by shop creation. Ads are not rendered or served to customers.
+- Ad impression and click totals are derived only from persisted event rows.
+  No public ad tracking endpoint or client ad placement is enabled.
+
+An assigned shop plan gates the existing store API permission modules and
+enforces employee/listing caps. Stores with no assigned plan retain their
+current behavior for compatibility. AI-token allowances are warning-only:
+successful Groq reference scans are recorded from provider-reported token
+usage, and the admin UI flags over-limit usage without blocking requests.
+If the provider omits token counts, the request is recorded but exact token
+usage remains unknown. Client plan assignments and AI allowances are
+administrative records; there is no separate client feature catalog or
+client-side AI operation in the current API to enforce/measure.
+
+The current platform schema does not capture shop verification documents or
+reported-content cases. The shop status endpoint can activate, pause, suspend,
+or close a shop with an audit reason, but it does not yet implement a separate
+application review/notification workflow. Platform-wide analytics charts,
+payment and appointment admin directories, and general-purpose database
+record browsing are not provided; financial records remain read-only through
+their existing APIs.
+
 ## Dashboard
 
 - `GET /stores/:storeId/dashboard`

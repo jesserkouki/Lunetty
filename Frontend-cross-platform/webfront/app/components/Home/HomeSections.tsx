@@ -8,9 +8,10 @@ import FavoriteButton from "@/app/components/Favorites/FavoriteButton";
 /* Types minimaux (compatibles avec MOCK_PRODUCTS / MOCK_STORES)       */
 /* ------------------------------------------------------------------ */
 export type HomeProduct = {
-  id: string; nom: string; marque: string; categorie: string; prix: number | null; devise: string | null;
-  rating: number; reviewsCount: number; frameShape: string | null; imageUrl: string | null;
-  lensCoating: string | null; opticianStore: string | null; storeId: string | null; city: string | null;
+  id: string; nom: string; marque: string; categorie: string; prix: number; devise: string;
+  rating: number; reviewsCount: number; frameShape: string; imageUrl: string;
+  lensCoating: string; opticianStore: string; storeId: string; city: string;
+  storeListingId?: string;
 };
 export type HomeStore = {
   id: string; nom: string; ville: string; quartier: string; rating: number; reviewsCount: number;

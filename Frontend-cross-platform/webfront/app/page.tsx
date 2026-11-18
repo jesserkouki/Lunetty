@@ -27,6 +27,27 @@ import Footer from './components/Site/SiteFooter';
 import { HomeSectionsTop, HomeSectionsBottom, type HomeProduct } from './components/Home/HomeSections';
 import FavoritesPage from './components/Favorites/FavoritesPage';
 import CatalogProductCard from './components/Catalog/CatalogProductCard';
+import { analyticsService } from '@/services/analytics.service';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function recordShopProfileClick(storeId: string) {
+  if (!UUID_PATTERN.test(storeId)) return;
+  void analyticsService.recordClick({ storeId, type: 'STORE_PROFILE' }).catch((error: unknown) => {
+    console.error('Unable to record shop profile click', error);
+  });
+}
+
+function recordListingClick(product: HomeProduct) {
+  if (!UUID_PATTERN.test(product.storeId) || !product.storeListingId) return;
+  void analyticsService.recordClick({
+    storeId: product.storeId,
+    type: 'STORE_LISTING',
+    listingId: product.storeListingId,
+  }).catch((error: unknown) => {
+    console.error('Unable to record shop listing click', error);
+  });
+}
 // --- MOCK DATABASE ---
 const MOCK_PRODUCTS = [
   {
@@ -1094,9 +1115,9 @@ const handleLogout = () => {
             {/* SECTIONS ÉDITORIALES (partie haute) : recommandés, nouveautés, tendance + publicité */}
             <HomeSectionsTop
               themeMode={themeMode}
-              products={homeProducts}
-              onTryOn={(p) => { setSelectedProduct(p); setActiveTab('tryon'); }}
-              onReserve={(p) => { setSelectedProduct(p); setActiveReservationModal(true); }}
+              products={MOCK_PRODUCTS}
+              onTryOn={(p) => { recordListingClick(p); setSelectedProduct(p); setActiveTab('tryon'); }}
+              onReserve={(p) => { recordListingClick(p); setSelectedProduct(p); setActiveReservationModal(true); }}
               onCatalog={() => setActiveTab('catalog')}
             />
 
@@ -1230,6 +1251,7 @@ const handleLogout = () => {
 
                           <button
                             onClick={() => {
+                              recordShopProfileClick(store.id);
                               setSelectedProduct(MOCK_PRODUCTS.find(p => p.storeId === store.id) || MOCK_PRODUCTS[0]);
                               setActiveReservationModal(true);
                             }}
@@ -1259,10 +1281,10 @@ const handleLogout = () => {
               themeMode={themeMode}
               products={homeProducts}
               stores={MOCK_STORES}
-              onTryOn={(p) => { setSelectedProduct(p); setActiveTab('tryon'); }}
-              onReserve={(p) => { setSelectedProduct(p); setActiveReservationModal(true); }}
+              onTryOn={(p) => { recordListingClick(p); setSelectedProduct(p); setActiveTab('tryon'); }}
+              onReserve={(p) => { recordListingClick(p); setSelectedProduct(p); setActiveReservationModal(true); }}
               onCatalog={() => setActiveTab('catalog')}
-              onStore={(id) => { setSelectedProduct(MOCK_PRODUCTS.find(p => p.storeId === id) || MOCK_PRODUCTS[0]); setActiveReservationModal(true); }}
+              onStore={(id) => { recordShopProfileClick(id); setSelectedProduct(MOCK_PRODUCTS.find(p => p.storeId === id) || MOCK_PRODUCTS[0]); setActiveReservationModal(true); }}
             />
 
           </div>
@@ -1497,53 +1519,46 @@ const handleLogout = () => {
 
           <div className="lg:col-span-9">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {catalogLoading ? (
-                <p role="status" className={`col-span-full py-10 text-center text-sm ${themeMode === 'dark' ? 'text-stone-400' : 'text-stone-600'}`}>
-                  Chargement du catalogue…
-                </p>
-              ) : catalogError ? (
-                <div role="alert" className={`col-span-full rounded-3xl border p-8 text-center text-sm ${
-                  themeMode === 'dark' ? 'border-rose-400/30 bg-rose-500/10 text-rose-200' : 'border-rose-200 bg-rose-50 text-rose-800'
-                }`}>
-                  <p>{catalogError}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCatalogError(null);
-                      setCatalogLoading(true);
-                      setCatalogReloadKey((key) => key + 1);
-                    }}
-                    className="mt-4 rounded-full border border-current/30 px-4 py-2 text-xs font-bold uppercase tracking-wider"
-                  >
-                    Réessayer
-                  </button>
-                </div>
-              ) : catalogProducts.length === 0 ? (
-                <p className={`col-span-full rounded-3xl border p-10 text-center text-sm ${
-                  themeMode === 'dark' ? 'border-white/10 bg-[#171514]/90 text-stone-400' : 'border-stone-200 bg-white text-stone-600'
-                }`}>
-                  Aucun article disponible pour le moment.
-                </p>
-              ) : filteredCatalogProducts.length === 0 ? (
-                <p className={`col-span-full rounded-3xl border p-10 text-center text-sm ${
-                  themeMode === 'dark' ? 'border-white/10 bg-[#171514]/90 text-stone-400' : 'border-stone-200 bg-white text-stone-600'
-                }`}>
-                  Aucun article ne correspond à ces filtres.
-                </p>
-              ) : (
-                filteredCatalogProducts.map((product) => (
-                    <CatalogProductCard
-                      key={product.id}
-                      product={product}
-                      dark={themeMode === 'dark'}
-                      returnTab="catalog"
-                      onReserve={(selected) => {
-                        setSelectedProduct(toHomeProduct(selected));
-                        setActiveReservationModal(true);
-                      }}
-                    />
-                ))
-              )}
+              {MOCK_PRODUCTS
+                .filter(p => filterShape === 'ALL' || p.frameShape === filterShape)
+                .filter(p => p.nom.toLowerCase().includes(searchQuery.toLowerCase()) || p.marque.toLowerCase().includes(searchQuery.toLowerCase()))
+                .map((product) => (
+                  <div key={product.id} className={`border rounded-3xl overflow-hidden hover:border-amber-500/40 transition-all flex flex-col justify-between shadow-xl ${
+                    themeMode === 'dark' ? 'bg-[#171514]/90 border-white/10' : 'bg-white border-stone-200'
+                  }`}>
+                    <div>
+                      <div className={`relative aspect-[4/3] overflow-hidden ${themeMode === 'dark' ? 'bg-[#100f0e]' : 'bg-stone-100'}`}>
+                        <img src={product.imageUrl} alt={product.nom} className="w-full h-full object-cover" />
+                        <span className={`absolute top-3 left-3 px-3 py-1 backdrop-blur-md rounded-xl text-[10px] font-semibold border ${
+                          themeMode === 'dark' ? 'bg-[#121110]/80 text-stone-300 border-white/10' : 'bg-white/90 text-stone-700 border-stone-200'
+                        }`}>
+                          {product.marque}
+                        </span>
+                      </div>
+
+                      <div className="p-6">
+                        <h3 className={`font-bold text-base ${themeMode === 'dark' ? 'text-white' : 'text-stone-900'}`}>{product.nom}</h3>
+                        <p className={`text-xs mt-2 flex items-center gap-1.5 ${themeMode === 'dark' ? 'text-stone-400' : 'text-stone-500'}`}>
+                          <MapPin className="w-3.5 h-3.5 text-stone-500" /> {product.opticianStore}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className={`p-6 pt-0 flex items-center justify-between border-t mt-3 ${
+                      themeMode === 'dark' ? 'border-white/10' : 'border-stone-200'
+                    }`}>
+                      <span className={`text-lg font-bold ${themeMode === 'dark' ? 'text-white' : 'text-stone-900'}`}>{product.prix.toFixed(3)} <span className="text-xs text-amber-600 dark:text-amber-200">TND</span></span>
+                      <button
+                        onClick={() => { recordListingClick(product); setSelectedProduct(product); setActiveReservationModal(true); }}
+                        className={`px-4 py-2.5 font-bold text-xs rounded-xl transition-colors uppercase tracking-wider ${
+                          themeMode === 'dark' ? 'bg-stone-100 text-stone-950 hover:bg-amber-100' : 'bg-stone-900 text-white hover:bg-stone-800'
+                        }`}
+                      >
+                        Réserver
+                      </button>
+                    </div>
+                  </div>
+                ))}
             </div>
           </div>
         </div>
@@ -1591,7 +1606,9 @@ const handleLogout = () => {
     }}
     onSuccess={(user, accountType) => {
   signIn(user, accountType);
-  if (accountType === 'OPTICIAN') {
+    if (user.role === 'SUPER_ADMIN') {
+      router.push('/admin');
+    } else if (accountType === 'OPTICIAN') {
     router.push('/optician/dashboard');
   } else {
     setActiveTab('user-dashboard');

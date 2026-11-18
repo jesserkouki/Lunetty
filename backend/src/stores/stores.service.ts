@@ -133,6 +133,15 @@ export class StoresService {
   async create(userId: string, input: CreateStoreDto) {
     try {
       return await this.prisma.$transaction(async (tx) => {
+        const platformControls = await tx.parametresPlateforme.findUnique({
+          where: { id: 'global' },
+          select: { inscriptions_magasins: true },
+        });
+        if (platformControls && !platformControls.inscriptions_magasins) {
+          throw new ForbiddenException(
+            'New shop registrations are temporarily disabled',
+          );
+        }
         const store = await tx.magasin.create({
           data: {
             nom: input.nom,
@@ -517,6 +526,7 @@ export class StoresService {
         'Temporary password must be at least 12 characters',
       );
     }
+    await this.storeAuthorization.assertStoreLimit(storeId, 'employees');
     const passwordHash = await this.passwordHasher.hash(
       temporaryPassword,
     );

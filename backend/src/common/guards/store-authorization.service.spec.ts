@@ -52,7 +52,7 @@ describe('StoreAuthorizationService', () => {
           statut: StatutAdhesion.ACTIVE,
           magasin: {
             is: {
-              statut: { not: StatutMagasin.FERME },
+              statut: StatutMagasin.ACTIVE,
               supprime_le: null,
             },
           },
@@ -70,6 +70,7 @@ describe('StoreAuthorizationService', () => {
           role: RoleMembre.EMPLOYE,
           permission_preset: 'custom',
           permissions: [{ code: 'inventory.adjust_stock', autorise: allowed }],
+          magasin: { plateforme_abonnement: null },
         })),
       },
     };
@@ -84,5 +85,49 @@ describe('StoreAuthorizationService', () => {
       service.requirePermission('employee-id', 'store-id', 'inventory.adjust_stock'),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.membreMagasin.findFirst).toHaveBeenCalledTimes(2);
+  });
+
+  it('denies a store module that is excluded from its assigned plan', async () => {
+    const prisma = {
+      membreMagasin: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'membership-id',
+          role: RoleMembre.PROPRIETAIRE,
+          permission_preset: null,
+          permissions: [],
+          magasin: {
+            plateforme_abonnement: {
+              plan: { actif: true, modules: ['orders'] },
+            },
+          },
+        }),
+      },
+    };
+    const service = new StoreAuthorizationService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.requirePermission('owner-id', 'store-id', 'inventory.view'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('enforces a configured employee cap', async () => {
+    const prisma = {
+      attributionPlanPlateforme: {
+        findUnique: jest.fn().mockResolvedValue({
+          plan: { actif: true, max_employes: 2, max_annonces: null },
+        }),
+      },
+      membreMagasin: { count: jest.fn().mockResolvedValue(2) },
+    };
+    const service = new StoreAuthorizationService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.assertStoreLimit('store-id', 'employees'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.membreMagasin.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ magasin_id: 'store-id' }),
+      }),
+    );
   });
 });
