@@ -4,6 +4,9 @@ import "./globals.css";
 import "./workspace.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { PortalAuthProvider } from "@/contexts/AuthContext";
+import { FavoritesProvider } from "@/contexts/FavoritesContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ClerkProvider } from "@clerk/nextjs";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,9 +30,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <AuthProvider>
-          <PortalAuthProvider>{children}</PortalAuthProvider>
-        </AuthProvider>
+        <ClerkProvider>
+          <AuthProvider>
+            <ThemeProvider>
+              <FavoritesProvider>
+                <PortalAuthProvider>{children}</PortalAuthProvider>
+              </FavoritesProvider>
+            </ThemeProvider>
+          </AuthProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

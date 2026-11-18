@@ -31,6 +31,16 @@ export class FavouritesController {
     return this.favourites.products(user.id, pagination);
   }
 
+  @Get('products/:productId')
+  @ApiOperation({ summary: "Check the authenticated user's favorite status" })
+  @ApiParam({ name: 'productId', format: 'uuid' })
+  isProductFavorite(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ) {
+    return this.favourites.isProductFavorite(user.id, productId);
+  }
+
   @Post('products/:productId')
   @ApiOperation({ summary: 'Favorite an active catalog product' })
   @ApiParam({ name: 'productId', format: 'uuid' })

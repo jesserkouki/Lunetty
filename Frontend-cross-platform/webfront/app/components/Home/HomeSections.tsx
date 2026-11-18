@@ -1,15 +1,16 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import Band from "../Site/SiteBand";
-import { Star, ChevronRight, Sparkles, Calendar, MapPin, BadgeCheck, Megaphone } from "lucide-react";
+import { Star, ChevronRight, Sparkles, Calendar, MapPin, BadgeCheck, Megaphone, Glasses } from "lucide-react";
+import FavoriteButton from "@/app/components/Favorites/FavoriteButton";
 
 /* ------------------------------------------------------------------ */
 /* Types minimaux (compatibles avec MOCK_PRODUCTS / MOCK_STORES)       */
 /* ------------------------------------------------------------------ */
 export type HomeProduct = {
-  id: string; nom: string; marque: string; categorie: string; prix: number; devise: string;
-  rating: number; reviewsCount: number; frameShape: string; imageUrl: string;
-  lensCoating: string; opticianStore: string; storeId: string; city: string;
+  id: string; nom: string; marque: string; categorie: string; prix: number | null; devise: string | null;
+  rating: number; reviewsCount: number; frameShape: string | null; imageUrl: string | null;
+  lensCoating: string | null; opticianStore: string | null; storeId: string | null; city: string | null;
 };
 export type HomeStore = {
   id: string; nom: string; ville: string; quartier: string; rating: number; reviewsCount: number;
@@ -80,9 +81,16 @@ function Card({
       dark ? "bg-[#1A1816]/90 border-white/10" : "bg-white border-stone-200"
     }`}>
       <div className="relative aspect-[4/3] overflow-hidden">
-        <img src={p.imageUrl} alt={p.nom} loading="lazy"
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+        {p.imageUrl ? (
+          <img src={p.imageUrl} alt={p.nom} loading="lazy"
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+        ) : (
+          <div className={`h-full flex items-center justify-center ${dark ? "bg-[#100f0e]" : "bg-stone-100"}`}>
+            <Glasses className="w-12 h-12 text-stone-400" aria-hidden />
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+        <FavoriteButton productId={p.id} dark={dark} returnTab="landing" />
         {rank && (
           <span className="absolute top-3 left-3 w-9 h-9 rounded-full bg-white text-stone-900 font-black text-sm flex items-center justify-center shadow-lg">
             {rank}
@@ -94,7 +102,7 @@ function Card({
           </span>
         )}
         {sponsored && (
-          <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-black/55 backdrop-blur text-white text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1">
+          <span className="absolute top-14 right-3 px-2.5 py-1 rounded-full bg-black/55 backdrop-blur text-white text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1">
             <Megaphone className="w-3 h-3" /> Sponsorisé
           </span>
         )}
@@ -102,17 +110,23 @@ function Card({
       <div className="p-5 flex flex-col gap-3 flex-1">
         <div className="flex items-center justify-between text-[11px]">
           <span className="font-bold uppercase tracking-widest text-amber-600 dark:text-amber-200">{p.marque}</span>
-          <span className={`flex items-center gap-1 ${dark ? "text-stone-400" : "text-stone-500"}`}>
-            <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" /> {p.rating} ({p.reviewsCount})
-          </span>
+          {p.reviewsCount > 0 && (
+            <span className={`flex items-center gap-1 ${dark ? "text-stone-400" : "text-stone-500"}`}>
+              <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" /> {p.rating} ({p.reviewsCount})
+            </span>
+          )}
         </div>
         <h3 className={`text-lg font-medium leading-snug ${dark ? "text-white" : "text-stone-900"}`}>{p.nom}</h3>
-        <p className={`text-xs flex items-center gap-1 ${dark ? "text-stone-400" : "text-stone-500"}`}>
-          <MapPin className="w-3 h-3" /> {p.opticianStore} · {p.city}
-        </p>
+        {p.opticianStore && (
+          <p className={`text-xs flex items-center gap-1 ${dark ? "text-stone-400" : "text-stone-500"}`}>
+            <MapPin className="w-3 h-3" /> {p.opticianStore}{p.city ? ` · ${p.city}` : ""}
+          </p>
+        )}
         <div className="mt-auto pt-3 flex items-center justify-between gap-2">
           <span className={`text-base font-bold ${dark ? "text-white" : "text-stone-900"}`}>
-            {p.prix.toFixed(3)} <span className="text-xs font-semibold">{p.devise}</span>
+            {p.prix !== null
+              ? <>{p.prix.toFixed(3)} <span className="text-xs font-semibold">{p.devise}</span></>
+              : <span className="text-xs font-medium">Prix non communiqué</span>}
           </span>
           <div className="flex gap-2">
             <button onClick={() => onTryOn(p)} title="Essayer en 3D" aria-label="Essayer en 3D"
@@ -121,10 +135,11 @@ function Card({
               }`}>
               <Sparkles className="w-4 h-4" />
             </button>
-            <button onClick={() => onReserve(p)}
+            <button onClick={() => onReserve(p)} disabled={!p.storeId}
+              title={!p.storeId ? "Aucun opticien disponible pour cet article" : undefined}
               className={`h-10 px-4 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
                 dark ? "bg-stone-100 text-stone-950 hover:bg-amber-100" : "bg-stone-900 text-white hover:bg-stone-800"
-              }`}>
+              } disabled:cursor-not-allowed disabled:opacity-50`}>
               <Calendar className="w-3.5 h-3.5" /> Réserver
             </button>
           </div>
@@ -137,6 +152,16 @@ function Card({
 const Grid = ({ children }: { children: React.ReactNode }) => (
   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">{children}</div>
 );
+
+function EmptyProducts({ dark }: { dark: boolean }) {
+  return (
+    <div className={`col-span-full rounded-3xl border p-8 text-center text-sm ${
+      dark ? "border-white/10 bg-white/5 text-stone-400" : "border-stone-200 bg-white/70 text-stone-600"
+    }`}>
+      Aucun article disponible pour le moment.
+    </div>
+  );
+}
 
 /* Bannière publicitaire plein format */
 function AdBanner({
@@ -211,7 +236,7 @@ export function HomeSectionsTop({ themeMode, products, onTryOn, onReserve, onCat
           title="Essayez en 3D. Réservez en boutique."
           text="Trouvez la monture qui vous va vraiment, puis retirez-la chez un opticien près de chez vous. Essai virtuel offert."
           cta="Essayer maintenant"
-          onClick={() => onTryOn(products[0])}
+          onClick={() => products[0] ? onTryOn(products[0]) : onCatalog()}
           position="50% 25%"
           bleed
         />
@@ -221,21 +246,27 @@ export function HomeSectionsTop({ themeMode, products, onTryOn, onReserve, onCat
         <Head dark={dark} eyebrow="Pour vous" title="Recommandé pour vous"
           rule="Vos préférences et votre historique de navigation" onAll={onCatalog} allLabel="Tout le catalogue" />
         <Grid>
-          {recommended.map((p) => <Card key={p.id} p={p} dark={dark} onTryOn={onTryOn} onReserve={onReserve} />)}
+          {recommended.length
+            ? recommended.map((p) => <Card key={p.id} p={p} dark={dark} onTryOn={onTryOn} onReserve={onReserve} />)
+            : <EmptyProducts dark={dark} />}
         </Grid>
       </Band>
 
       <Band dark={dark} tone="plain">
         <Head dark={dark} eyebrow="Fraîchement ajoutés" title="Nouveautés" rule="Produits récemment publiés" onAll={onCatalog} />
         <Grid>
-          {arrivals.map((p) => <Card key={p.id} p={p} dark={dark} badge="Nouveau" onTryOn={onTryOn} onReserve={onReserve} />)}
+          {arrivals.length
+            ? arrivals.map((p) => <Card key={p.id} p={p} dark={dark} badge="Nouveau" onTryOn={onTryOn} onReserve={onReserve} />)
+            : <EmptyProducts dark={dark} />}
         </Grid>
       </Band>
 
       <Band dark={dark} tone="soft">
         <Head dark={dark} eyebrow="Du moment" title="Montures tendance" rule="Engagement et ventes récents" onAll={onCatalog} />
         <Grid>
-          {trending.map((p) => <Card key={p.id} p={p} dark={dark} badge="Tendance" onTryOn={onTryOn} onReserve={onReserve} />)}
+          {trending.length
+            ? trending.map((p) => <Card key={p.id} p={p} dark={dark} badge="Tendance" onTryOn={onTryOn} onReserve={onReserve} />)
+            : <EmptyProducts dark={dark} />}
         </Grid>
       </Band>
     </>
@@ -309,7 +340,9 @@ export function HomeSectionsBottom({
       <Band dark={dark} tone="plain">
         <Head dark={dark} eyebrow="Top des ventes" title="Meilleures ventes" rule="Performances de vente réelles" onAll={onCatalog} />
         <Grid>
-          {best.map((p, i) => <Card key={p.id} p={p} dark={dark} rank={i + 1} onTryOn={onTryOn} onReserve={onReserve} />)}
+          {best.length
+            ? best.map((p, i) => <Card key={p.id} p={p} dark={dark} rank={i + 1} onTryOn={onTryOn} onReserve={onReserve} />)
+            : <EmptyProducts dark={dark} />}
         </Grid>
       </Band>
 

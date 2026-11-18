@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { ClerkAuthService } from './clerk-auth.service';
+import { ClerkIdentityService } from './clerk-identity.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { JwtTokenService } from './jwt-token.service';
 import { PasswordHasher } from './password-hasher.service';
@@ -12,6 +14,8 @@ import { SuperAdminGuard } from './super-admin.guard';
   controllers: [AuthController],
   providers: [
     AuthService,
+    ClerkAuthService,
+    ClerkIdentityService,
     JwtTokenService,
     PasswordHasher,
     JwtAuthGuard,
@@ -19,6 +23,7 @@ import { SuperAdminGuard } from './super-admin.guard';
   ],
   exports: [
     AuthService,
+    ClerkIdentityService,
     JwtAuthGuard,
     JwtTokenService,
     PasswordHasher,

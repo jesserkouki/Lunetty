@@ -13,6 +13,7 @@ import { ALLOW_INITIAL_PASSWORD_CHANGE } from './allow-initial-password-change.d
 
 import { AuthenticatedRequest } from './auth.types';
 import { JwtTokenService } from './jwt-token.service';
+import { ClerkIdentityService } from './clerk-identity.service';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -21,7 +22,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly prisma: PrismaService,
 
     private readonly reflector: Reflector,
-
+    private readonly clerkIdentity: ClerkIdentityService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -31,17 +32,37 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Bearer access token is required');
     }
 
-    const principal = this.tokens.verify(authorization.slice(7));
-    const user = await this.prisma.utilisateur.findFirst({
-      where: {
-        id: principal.id,
-        statut: StatutUtilisateur.ACTIVE,
-        supprime_le: null,
-      },
+    const token = authorization.slice(7);
+    let user;
+    try {
+      const principal = this.tokens.verify(token);
+      user = await this.prisma.utilisateur.findFirst({
+        where: {
+          id: principal.id,
+          statut: StatutUtilisateur.ACTIVE,
+          supprime_le: null,
+        },
+        select: { id: true, role: true, doit_changer_mot_de_passe: true },
+      });
+    } catch (error) {
+      if (!(error instanceof UnauthorizedException)) {
+        throw error;
+      }
+      if (!this.clerkIdentity.isConfigured()) {
+        throw error;
+      }
 
-      select: { id: true, role: true, doit_changer_mot_de_passe: true },
-
-    });
+      const clerkUserId =
+        await this.clerkIdentity.verifySessionToken(token);
+      user = await this.prisma.utilisateur.findFirst({
+        where: {
+          clerk_user_id: clerkUserId,
+          statut: StatutUtilisateur.ACTIVE,
+          supprime_le: null,
+        },
+        select: { id: true, role: true, doit_changer_mot_de_passe: true },
+      });
+    }
     if (!user) {
       throw new UnauthorizedException('Account is unavailable');
     }

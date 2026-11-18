@@ -6,6 +6,7 @@ import {
 import { Prisma, StatutMagasin, StatutProduit } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaginationDto, paginated } from '../common/dto/pagination.dto';
+import { productCardSelect, toProductCard } from '../products/product-card';
 
 @Injectable()
 export class FavouritesService {
@@ -22,9 +23,7 @@ export class FavouritesService {
         select: {
           id: true,
           cree_le: true,
-          produit: {
-            select: { id: true, nom: true, slug: true, marque: true, type: true },
-          },
+          produit: { select: productCardSelect },
         },
         orderBy: { cree_le: 'desc' },
         skip: pagination.skip,
@@ -32,7 +31,16 @@ export class FavouritesService {
       }),
       this.prisma.produitFavori.count({ where }),
     ]);
-    return paginated(items, total, pagination.page, pagination.limit);
+    return paginated(
+      items.map((item) => ({
+        id: item.id,
+        cree_le: item.cree_le,
+        produit: toProductCard(item.produit),
+      })),
+      total,
+      pagination.page,
+      pagination.limit,
+    );
   }
 
   async addProduct(userId: string, productId: string) {
@@ -41,17 +49,29 @@ export class FavouritesService {
       select: { id: true },
     });
     if (!product) throw new NotFoundException('Active product not found');
-    try {
-      return await this.prisma.produitFavori.create({
-        data: { utilisateur_id: userId, produit_id: productId },
-        select: { id: true, produit_id: true, cree_le: true },
-      });
-    } catch (error) {
-      if (isUniqueConflict(error)) {
-        throw new ConflictException('Product is already in favorites');
-      }
-      throw error;
-    }
+    return this.prisma.produitFavori.upsert({
+      where: {
+        utilisateur_id_produit_id: {
+          utilisateur_id: userId,
+          produit_id: productId,
+        },
+      },
+      create: { utilisateur_id: userId, produit_id: productId },
+      update: {},
+      select: { id: true, produit_id: true, cree_le: true },
+    });
+  }
+
+  async isProductFavorite(userId: string, productId: string) {
+    const favorite = await this.prisma.produitFavori.findFirst({
+      where: {
+        utilisateur_id: userId,
+        produit_id: productId,
+        produit: { statut: StatutProduit.ACTIVE, supprime_le: null },
+      },
+      select: { id: true },
+    });
+    return { isFavorite: Boolean(favorite) };
   }
 
   async removeProduct(userId: string, productId: string) {

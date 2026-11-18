@@ -212,9 +212,12 @@ checkout URLs, and internal failure details are never returned.
 - `GET|POST /api/v1/clients/me/prescriptions` and
   `GET|PATCH|DELETE /api/v1/clients/me/prescriptions/:prescriptionId` — prescription and
   eye-specific data scoped to the authenticated user's client profile.
-- `GET|POST|DELETE /api/v1/users/me/favorites/products[/:productId]` and
-  `GET|POST|DELETE /api/v1/users/me/favorites/stores[/:storeId]` — owner-scoped
-  favorites for active catalog products and stores.
+- `GET /api/v1/users/me/favorites/products` lists the authenticated user's products;
+  `GET /api/v1/users/me/favorites/products/:productId` checks a product's favorite status.
+- `POST|DELETE /api/v1/users/me/favorites/products/:productId` are owner-scoped and
+  `POST` is idempotent. `GET|POST|DELETE /api/v1/users/me/favorites/stores[/:storeId]`
+  are owner-scoped favorites for active stores. Product favorites include the active
+  product image and lowest available active store-listing price when present.
 
 ### Social
 
@@ -323,14 +326,18 @@ The following endpoints require the `SUPER_ADMIN` platform role:
 ## Authentication and authorization
 
 Use `POST /api/v1/auth/register` and `POST /api/v1/auth/login` for the existing
-credential flow, then send `Authorization: Bearer <accessToken>` to protected
-routes. Access tokens expire in 15 minutes. Sensitive endpoints are rate
-limited in-process; multi-instance deployments need a shared throttling store.
+credential flow; its application JWT expires in 15 minutes. For Clerk sign-in,
+send the verified Clerk session token to `POST /api/v1/auth/clerk/sync` and use
+that Clerk bearer token for protected routes. The API independently verifies
+Clerk tokens, resolves the verified subject through the unique
+`utilisateurs.clerk_user_id` field, and continues applying the database user,
+role, status, and membership checks. The sync endpoint fetches the primary
+email server-side and idempotently creates or links the existing user record.
 
-Secure refresh/logout revocation, password reset and email verification are not
-available yet: the current schema has no durable refresh/challenge storage and
-no mail provider is configured. Registration status policy must be reconciled
-with email verification before production.
+Clerk owns Google-session renewal and logout. Password reset and email
+verification for the legacy email/password registration flow are not available
+yet because no mail provider is configured. Sensitive endpoints are rate
+limited in-process; multi-instance deployments need a shared throttling store.
 
 ## Responses and errors
 

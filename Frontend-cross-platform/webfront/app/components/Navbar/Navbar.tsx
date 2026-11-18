@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Glasses, Sparkles, Sun, Moon, Menu, X, User, LogOut, ArrowUpRight } from "lucide-react";
+import { Glasses, Sparkles, Sun, Moon, Menu, X, User, LogOut, ArrowUpRight, Settings } from "lucide-react";
 
 type Props = {
   themeMode: string;
@@ -9,13 +9,16 @@ type Props = {
   onNavigate: (tab: string) => void;
   userRole: string; // 'GUEST' | 'CLIENT' | 'OPTICIAN'
   userName?: string;
+  userImageUrl?: string | null;
   onLogin: () => void;
   onLogout: () => void;
+  onSettings: () => void;
 };
 
-const LINKS = [
+type NavLink = { id: string; label: string; spark?: boolean };
+
+const LINKS: NavLink[] = [
   { id: "landing", label: "Accueil" },
-  { id: "tryon", label: "Studio 3D", spark: true },
   { id: "catalog", label: "Catalogue" },
 ];
 
@@ -25,12 +28,15 @@ const LINKS = [
  * menu mobile en panneau verre.
  */
 export default function Navbar({
-  themeMode, onToggleTheme, activeTab, onNavigate, userRole, userName, onLogin, onLogout,
+  themeMode, onToggleTheme, activeTab, onNavigate, userRole, userName,
+  userImageUrl, onLogin, onLogout, onSettings,
 }: Props) {
   const dark = themeMode === "dark";
   const [scrolled, setScrolled] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [open, setOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const lastY = useRef(0);
 
   // Indicateur glissant
@@ -61,7 +67,21 @@ export default function Navbar({
     return () => window.removeEventListener("scroll", onScroll);
   }, [open]);
 
-  const go = (id: string) => { onNavigate(id); setOpen(false); };
+  useEffect(() => {
+    const closeMenu = (event: PointerEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeMenu);
+    return () => document.removeEventListener("pointerdown", closeMenu);
+  }, []);
+
+  const go = (id: string) => {
+    onNavigate(id);
+    setOpen(false);
+    setUserMenuOpen(false);
+  };
 
   // Styles dépendants du thème
   const glass = dark
@@ -78,6 +98,9 @@ export default function Navbar({
   const cta = dark
     ? "bg-stone-100 text-stone-950 hover:bg-amber-100"
     : "bg-stone-900 text-white hover:bg-stone-800";
+  const links: NavLink[] = userRole === "CLIENT"
+    ? [...LINKS, { id: "favorites", label: "Mes favoris" }]
+    : LINKS;
 
   return (
     <>
@@ -127,7 +150,7 @@ export default function Navbar({
                   }`}
                   style={{ left: pill.left, width: pill.width }}
                 />
-                {LINKS.map((l) => {
+                {links.map((l) => {
                   const active = activeTab === l.id;
                   return (
                     <button
@@ -167,24 +190,46 @@ export default function Navbar({
                   <ArrowUpRight className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 </button>
               ) : (
-                <div className="hidden sm:flex items-center gap-2">
+                <div className="hidden sm:block relative" ref={userMenuRef}>
                   <button
-                    onClick={() => go(userRole === "CLIENT" ? "user-dashboard" : "optician-dashboard")}
+                    onClick={() => setUserMenuOpen((value) => !value)}
+                    aria-expanded={userMenuOpen}
+                    aria-haspopup="menu"
                     className={`h-10 pl-1.5 pr-4 rounded-full border flex items-center gap-2 text-[12px] font-semibold transition-colors ${iconBtn}`}
                   >
-                    <span className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-200 to-amber-500 text-stone-950 flex items-center justify-center text-[11px] font-black">
-                      {(userName || "?").trim().charAt(0).toUpperCase()}
-                    </span>
+                    {userImageUrl ? (
+                      <img src={userImageUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+                    ) : (
+                      <span className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-200 to-amber-500 text-stone-950 flex items-center justify-center text-[11px] font-black">
+                        {(userName || "?").trim().charAt(0).toUpperCase()}
+                      </span>
+                    )}
                     <span className="max-w-[120px] truncate">{userName || "Mon compte"}</span>
+                    <span aria-hidden className="text-[10px] opacity-60">⌄</span>
                   </button>
-                  <button
-                    onClick={onLogout}
-                    aria-label="Se déconnecter"
-                    title="Se déconnecter"
-                    className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors hover:text-rose-500 ${iconBtn}`}
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
+                  {userMenuOpen && (
+                    <div
+                      role="menu"
+                      className={`absolute right-0 top-full mt-2 w-52 rounded-2xl border p-2 shadow-2xl backdrop-blur-xl ${
+                        dark ? "border-white/10 bg-[#171514]/95" : "border-stone-200 bg-white/95"
+                      }`}
+                    >
+                      <button role="menuitem" onClick={() => go("user-dashboard")}
+                        className={`w-full rounded-xl px-3 py-2.5 text-left text-sm flex items-center gap-2 ${idleText}`}>
+                        <User className="w-4 h-4" /> Profil
+                      </button>
+                      {userRole === "CLIENT" && (
+                        <button role="menuitem" onClick={() => { setUserMenuOpen(false); onSettings(); }}
+                          className={`w-full rounded-xl px-3 py-2.5 text-left text-sm flex items-center gap-2 ${idleText}`}>
+                          <Settings className="w-4 h-4" /> Paramètres
+                        </button>
+                      )}
+                      <button role="menuitem" onClick={() => { setUserMenuOpen(false); onLogout(); }}
+                        className="w-full rounded-xl px-3 py-2.5 text-left text-sm flex items-center gap-2 text-rose-500 hover:bg-rose-500/10">
+                        <LogOut className="w-4 h-4" /> Se déconnecter
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -206,7 +251,7 @@ export default function Navbar({
               open ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
             }`}
           >
-            {LINKS.map((l) => (
+            {links.map((l) => (
               <button
                 key={l.id}
                 onClick={() => go(l.id)}
@@ -230,19 +275,26 @@ export default function Navbar({
                   Espace Pro &amp; Client
                 </button>
               ) : (
-                <div className="flex gap-2">
+                <div className="space-y-1">
                   <button
                     onClick={() => go(userRole === "CLIENT" ? "user-dashboard" : "optician-dashboard")}
-                    className={`flex-1 h-12 rounded-2xl border text-sm font-semibold flex items-center justify-center gap-2 ${iconBtn}`}
+                    className={`w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold flex items-center gap-2 ${iconBtn}`}
                   >
                     <User className="w-4 h-4" /> {userName || "Mon compte"}
                   </button>
+                  {userRole === "CLIENT" && (
+                    <button
+                      onClick={() => { setOpen(false); onSettings(); }}
+                      className={`w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold flex items-center gap-2 ${iconBtn}`}
+                    >
+                      <Settings className="w-4 h-4" /> Paramètres
+                    </button>
+                  )}
                   <button
                     onClick={() => { setOpen(false); onLogout(); }}
-                    aria-label="Se déconnecter"
-                    className={`w-12 h-12 rounded-2xl border flex items-center justify-center ${iconBtn}`}
+                    className="w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold flex items-center gap-2 text-rose-500"
                   >
-                    <LogOut className="w-4 h-4" />
+                    <LogOut className="w-4 h-4" /> Se déconnecter
                   </button>
                 </div>
               )}

@@ -37,6 +37,26 @@ describe('UsersService', () => {
     });
   });
 
+  it('normalizes stray punctuation and whitespace in profile names', async () => {
+    prisma.utilisateur.updateMany.mockResolvedValue({ count: 1 });
+    prisma.utilisateur.findFirst.mockResolvedValue({
+      id: 'user-id',
+      prenom: 'Aziz',
+      nom: 'Khaled',
+    });
+
+    await service.updateMe('user-id', {
+      prenom: '  Aziz  ',
+      nom: 'Aziz .khaled',
+    });
+
+    expect(prisma.utilisateur.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { prenom: 'Aziz', nom: 'Aziz khaled' },
+      }),
+    );
+  });
+
   it('translates duplicate usernames into a conflict response', async () => {
     prisma.utilisateur.updateMany.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('Duplicate', {

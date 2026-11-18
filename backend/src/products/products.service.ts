@@ -13,23 +13,11 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-
-const productSelect = {
-  id: true,
-  nom: true,
-  slug: true,
-  description: true,
-  marque: true,
-  fabricant: true,
-  type: true,
-  statut: true,
-  public_cible: true,
-  categorie: true,
-  etiquettes: true,
-  attributs: true,
-  cree_le: true,
-  modifie_le: true,
-} satisfies Prisma.ProduitSelect;
+import {
+  productListSelect,
+  productSelect,
+  toProductCard,
+} from './product-card';
 
 const variantSelect = {
   id: true,
@@ -67,20 +55,19 @@ export class ProductsService {
     const [data, total] = await this.prisma.$transaction([
       this.prisma.produit.findMany({
         where,
-        select: {
-          ...productSelect,
-          variantes: {
-            where: { est_actif: true },
-            select: variantSelect,
-          },
-        },
+        select: productListSelect,
         orderBy: { cree_le: 'desc' },
         skip: query.skip,
         take: query.limit,
       }),
       this.prisma.produit.count({ where }),
     ]);
-    return paginated(data, total, query.page, query.limit);
+    return paginated(
+      data.map((product) => ({ ...product, ...toProductCard(product) })),
+      total,
+      query.page,
+      query.limit,
+    );
   }
 
   async findPublic(id: string) {

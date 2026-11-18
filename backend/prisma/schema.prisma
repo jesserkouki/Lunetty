@@ -306,6 +306,7 @@ enum TypeNotification {
   MISE_A_JOUR_COMMANDE    @map("ORDER_UPDATE")
   MISE_A_JOUR_PAIEMENT    @map("PAYMENT_UPDATE")
   MISE_A_JOUR_RENDEZ_VOUS @map("APPOINTMENT_UPDATE")
+  RAPPEL_RENDEZ_VOUS      @map("APPOINTMENT_REMINDER")
   NOUVEL_ABONNE           @map("NEW_FOLLOWER")
   INTERACTION_PUBLICATION @map("POST_INTERACTION")
   PROMOTION
@@ -317,6 +318,7 @@ enum TypeNotification {
 enum CanalNotification {
   DANS_APPLICATION @map("IN_APP")
   EMAIL
+  SMS
   PUSH
 
   @@map("NotificationChannel")
@@ -338,6 +340,7 @@ model Utilisateur {
   nom                             String                     @map("nom_famille") @db.VarChar(100)
   nom_utilisateur                 String?                    @unique @map("username") @db.VarChar(50)
   email                           String                     @unique @db.VarChar(255)
+  clerk_user_id                   String?                    @unique @map("clerk_user_id") @db.VarChar(255)
   empreinte_mot_de_passe          String                     @db.VarChar(255)
   doit_changer_mot_de_passe       Boolean                    @default(false) @map("must_change_password")
   telephone                       String?                    @map("phone") @db.VarChar(30)
@@ -726,14 +729,19 @@ model Ordonnance {
   expire_le               DateTime?         @map("expires_at") @db.Date
   notes                   String?           @db.Text
   cle_document_source     String?           @map("source_document_key") @db.VarChar(1024)
+  nom_fichier             String?           @map("file_name") @db.VarChar(255)
+  type_fichier            String?           @map("file_type") @db.VarChar(100)
+  est_active              Boolean           @default(false) @map("is_active")
   cree_le                 DateTime          @default(now()) @db.Timestamptz(6)
   modifie_le              DateTime          @updatedAt @db.Timestamptz(6)
   profil_client           ProfilClient      @relation(fields: [profil_client_id], references: [id], onDelete: Cascade)
   magasin_prescripteur    Magasin?          @relation("MagasinPrescripteur", fields: [magasin_prescripteur_id], references: [id], onDelete: SetNull)
   yeux                    OeilOrdonnance[]
   articles_commande       ArticleCommande[]
+  rendez_vous             RendezVous[]
 
   @@index([profil_client_id, prescrit_le])
+  @@index([profil_client_id, est_active])
   @@map("ordonnances")
 }
 
@@ -913,6 +921,7 @@ model RendezVous {
   utilisateur_id String           @db.Uuid
   magasin_id     String           @db.Uuid
   commande_id    String?          @unique @map("order_id") @db.Uuid
+  ordonnance_id  String?          @map("prescription_id") @db.Uuid
   statut         StatutRendezVous @default(DEMANDE) @map("status")
   type_service   String           @map("service_type") @db.VarChar(100)
   commence_le    DateTime         @map("starts_at") @db.Timestamptz(6)
@@ -924,9 +933,12 @@ model RendezVous {
   utilisateur    Utilisateur      @relation(fields: [utilisateur_id], references: [id], onDelete: Restrict)
   magasin        Magasin          @relation(fields: [magasin_id], references: [id], onDelete: Restrict)
   order          Commande?        @relation(fields: [commande_id], references: [id], onDelete: SetNull)
+  ordonnance     Ordonnance?      @relation(fields: [ordonnance_id], references: [id], onDelete: SetNull)
+  notifications  Notification[]
 
   @@index([magasin_id, commence_le, statut])
   @@index([utilisateur_id, commence_le])
+  @@index([ordonnance_id])
   @@map("rendez_vous")
 }
 
@@ -1145,6 +1157,7 @@ model ConsentementEssayage {
 model Notification {
   id             String             @id @default(uuid()) @db.Uuid
   utilisateur_id String             @db.Uuid
+  rendez_vous_id String?            @unique @map("appointment_id") @db.Uuid
   type           TypeNotification
   titre          String             @map("title") @db.VarChar(180)
   contenu        String             @map("body") @db.Text
@@ -1154,6 +1167,7 @@ model Notification {
   envoye_le      DateTime?          @map("sent_at") @db.Timestamptz(6)
   cree_le        DateTime           @default(now()) @db.Timestamptz(6)
   utilisateur    Utilisateur        @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  rendez_vous    RendezVous?        @relation(fields: [rendez_vous_id], references: [id], onDelete: Cascade)
 
   @@index([utilisateur_id, statut, cree_le])
   @@map("notifications")

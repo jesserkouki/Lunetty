@@ -360,7 +360,8 @@ export function WorkspacePage({
   useEffect(() => {
     if (auth.loading) return;
     if (!auth.user) {
-      router.replace("/");
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      router.replace(`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`);
       return;
     }
     if (portal !== auth.portal) {

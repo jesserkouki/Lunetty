@@ -17,13 +17,6 @@ COPY . .
 # Générer le client Prisma avec le schéma inclus dans l'image
 RUN npx prisma generate
 
-# Préparer les permissions du volume node_modules
-RUN mkdir -p /app/dist /app/uploads && \
-    chown node:node /app && \
-    chown -R node:node /app/node_modules /app/dist /app/uploads
-
-# Utiliser un utilisateur non-root
-USER node
 
 EXPOSE 3000
 

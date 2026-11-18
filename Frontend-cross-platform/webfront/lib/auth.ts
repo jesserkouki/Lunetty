@@ -27,11 +27,31 @@ export type ProfilePatch = Partial<
   >
 >;
 
-export const toCurrentUser = (user: AuthUser, accountType: AccountType): CurrentUser => ({
-  ...user,
-  name: `${user.prenom} ${user.nom}`,
-  accountType,
-});
+export const toCurrentUser = (user: AuthUser, accountType: AccountType): CurrentUser => {
+  const cleanName = (value: string) =>
+    value.trim().replace(/^[\s.,;:]+|[\s.,;:]+$/g, '').replace(/\s+/g, ' ');
+  const prenom = cleanName(user.prenom);
+  const nom = cleanName(user.nom);
+  return {
+    ...user,
+    prenom,
+    nom,
+    name: `${prenom} ${nom}`.trim(),
+    accountType,
+  };
+};
+
+export function safeInternalRedirect(value: string | null, origin: string): string | null {
+  if (!value) return null;
+  try {
+    const target = new URL(value, origin);
+    return target.origin === origin
+      ? `${target.pathname}${target.search}${target.hash}`
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 // ---- token storage (guarded: storage can throw in private mode) ----
 export const getToken = () => {
@@ -71,6 +91,14 @@ const FR_MESSAGES: Record<string, string> = {
   'A valid email address is required': 'Adresse email invalide.',
   'Password must be at least 12 characters': 'Le mot de passe doit contenir au moins 12 caractères.',
   'An account already exists for that email or username': 'Un compte existe déjà avec cet email.',
+  'An account already exists for that email or Clerk identity': 'Un compte existe déjà avec cet email ou cette identité.',
+  'This email is linked to a different Clerk identity': 'Cette adresse e-mail est associée à une autre identité.',
+  'The Clerk email is already used by another application account': 'Cette adresse e-mail est déjà utilisée par un autre compte.',
+  'This email was linked to another identity; sign in again': 'Cette adresse e-mail vient d’être associée à une autre identité. Reconnectez-vous.',
+  'A verified primary email address is required': 'Une adresse e-mail principale vérifiée est requise.',
+  'The verified Clerk email is not supported by this application': 'Cette adresse e-mail vérifiée n’est pas prise en charge.',
+  'Clerk session has no user identity': 'La session Clerk ne contient aucune identité utilisateur.',
+  'Invalid or expired Clerk session token': 'Votre session Google a expiré. Reconnectez-vous.',
   'That username is already in use': "Ce nom d'utilisateur est déjà pris.",
   'Bearer access token is required': 'Veuillez vous connecter.',
   'Invalid or expired access token': 'Votre session a expiré. Veuillez vous reconnecter.',
@@ -136,6 +164,12 @@ export const register = (input: { prenom: string; nom: string; email: string; pa
 
 export const fetchMe = (token: string) =>
   request<AuthUser>('/auth/me', { headers: authed(token) });
+
+export const syncClerkUser = (token: string) =>
+  request<AuthUser>('/auth/clerk/sync', {
+    method: 'POST',
+    headers: authed(token),
+  });
 
 export const updateProfile = (token: string, patch: ProfilePatch) =>
   request<AuthUser>('/auth/me', {

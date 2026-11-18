@@ -1,17 +1,26 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  StreamableFile,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiTags,
@@ -21,7 +30,7 @@ import { AuthenticatedRequest } from '../auth/auth.types';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
-import { UsersService } from './users.service';
+import { AvatarUploadFile, UsersService } from './users.service';
 
 @Controller('users')
 @ApiTags('Users')
@@ -62,6 +71,55 @@ export class UsersController {
     @Body() input: UpdateUserProfileDto,
   ) {
     return this.users.updateMe(user.id, input);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('me/avatar')
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_request, file, callback) => {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+          callback(
+            new BadRequestException('Only JPG, PNG, or WebP images are allowed'),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+      required: ['file'],
+    },
+  })
+  uploadAvatar(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @UploadedFile() file: AvatarUploadFile | undefined,
+  ) {
+    if (!file) throw new BadRequestException('An avatar image is required');
+    return this.users.uploadAvatar(user.id, file);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Delete('me/avatar')
+  deleteAvatar(@CurrentUser() user: AuthenticatedRequest['user']) {
+    return this.users.deleteAvatar(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('me/export')
+  exportMe(@CurrentUser() user: AuthenticatedRequest['user']) {
+    return this.users.exportMe(user.id);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -116,6 +174,16 @@ export class UsersController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.users.unfollow(user.id, id);
+  }
+
+  @Get(':userId/avatar/:filename')
+  @Header('Cache-Control', 'public, max-age=86400, immutable')
+  getAvatar(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Param('filename') filename: string,
+  ) {
+    const avatar = this.users.getAvatar(userId, filename);
+    return new StreamableFile(avatar.stream, { type: avatar.contentType });
   }
 
   @Get(':id')

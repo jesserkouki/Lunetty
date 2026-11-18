@@ -1,9 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
-  ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsOptional,
   IsString,
@@ -35,11 +35,19 @@ export class CreatePrescriptionDto {
   @MaxLength(10000)
   notes?: string;
 
-  @ApiProperty({ type: [PrescriptionEyeDto] })
+  @ApiPropertyOptional({ type: [PrescriptionEyeDto] })
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(2)
   @ValidateNested({ each: true })
   @Type(() => PrescriptionEyeDto)
-  yeux!: PrescriptionEyeDto[];
+  yeux?: PrescriptionEyeDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  est_active?: boolean;
 }

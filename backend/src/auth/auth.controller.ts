@@ -3,9 +3,11 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Patch,
   Post,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -13,13 +15,30 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { AuthenticatedRequest } from './auth.types';
 import { AllowInitialPasswordChange } from './allow-initial-password-change.decorator';
 import { AuthService } from './auth.service';
+import { ClerkAuthService } from './clerk-auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('auth')
 @ApiTags('Authentication')
 @SkipThrottle()
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly clerkAuth: ClerkAuthService,
+  ) {}
+
+  @Post('clerk/sync')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Synchronize the verified Clerk identity with an application user',
+  })
+  synchronizeClerkIdentity(@Headers('authorization') authorization?: string) {
+    if (!authorization?.startsWith('Bearer ')) {
+      throw new UnauthorizedException('Bearer Clerk session token is required');
+    }
+    return this.clerkAuth.synchronize(authorization.slice(7));
+  }
 
   @Post('register')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
@@ -68,6 +87,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('change-password')
+  @Throttle({ default: { limit: 3, ttl: 900_000 } })
   @ApiBearerAuth()
   @AllowInitialPasswordChange()
   @ApiOperation({ summary: 'Change a temporary password' })

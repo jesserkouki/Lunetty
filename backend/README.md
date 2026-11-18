@@ -35,8 +35,8 @@ $ npm install
 
 The backend uses a domain-oriented modular monolith. Feature modules expose
 versioned HTTP endpoints, application services implement business rules, and
-Prisma is kept at the persistence boundary. The Prisma schema remains unchanged
-and is the source of truth for database field and model names.
+Prisma is kept at the persistence boundary. The Prisma schema is the source of
+truth for database field and model names.
 
 Set `AUTH_JWT_SECRET` to a random secret of at least 32 characters and
 `DATABASE_URL` to the PostgreSQL connection string before starting the API.
@@ -50,15 +50,70 @@ Registration creates an active account because no email-delivery or verification
 flow is configured yet. Passwords are stored as scrypt hashes; access tokens
 expire after 15 minutes.
 
-Docker Compose does not apply database migrations during API startup. The
-current database/schema diff and migration history require manual review before
-any migration is generated or applied; do not run `prisma migrate deploy`,
-`prisma db push`, or a reset as a startup shortcut.
+### Clerk / Google authentication
+
+The API accepts either its existing 15-minute application JWT or a verified
+Clerk session token. Clerk tokens are checked with `@clerk/backend` and an
+explicit authorized-party allowlist; every protected request then resolves the
+verified Clerk subject to the existing `utilisateurs.clerk_user_id` link and
+still applies the database account status, role, and membership rules.
+
+Set these values in the backend's private environment:
+
+```env
+CLERK_SECRET_KEY=sk_test_...
+CLERK_AUTHORIZED_PARTIES=http://localhost:3000,http://localhost:3001,https://your-production-domain
+```
+
+Docker Compose defaults `CLERK_AUTHORIZED_PARTIES` to
+`http://localhost:3001` for the local frontend. Set
+`CLERK_AUTHORIZED_PARTIES` in the project-level `.env` to override it with the
+exact frontend origins used by your deployment.
+
+Use the matching Clerk instance's secret key and include only the exact
+frontend origins permitted to mint session tokens. Never expose the secret key
+to the frontend. `POST /api/v1/auth/clerk/sync` requires a Clerk bearer token;
+the API verifies the token, fetches the primary email from Clerk, and creates
+or links the existing `Utilisateur` record idempotently. Linking by email is
+allowed only for a verified Clerk email and an unlinked, active application
+user. A conflicting Clerk identity or inactive account is rejected. New users
+receive the existing default `USER` role and `ACTIVE` status; a random,
+unusable local password hash satisfies the existing schema without granting
+password access.
+
+Review and apply the additive migration
+`prisma/migrations/20261117010000_add_clerk_user_id/migration.sql` through the
+database deployment process before enabling Clerk sign-in. Migrations are not
+applied automatically at API startup.
+
+Docker Compose does not apply database migrations during API startup. Review
+each migration against the target database, then deploy it explicitly; do not
+use `prisma db push` or a reset as a startup shortcut.
+
+### Client settings and appointment reminders
+
+The client dashboard uses the authenticated profile, avatar, prescription,
+notification-preference, data-export, account-deactivation, and appointment
+endpoints. Prescription documents are stored privately under `uploads/` and
+served only through authenticated owner or explicitly shared appointment
+endpoints. Keep the Compose `backend_uploads` volume attached to preserve these
+files across container rebuilds.
+
+The migrations `20261118010000_add_notification_reminder_enums` and
+`20261118020000_client_dashboard_settings` add the active-prescription
+constraint, appointment sharing relation, reminder notification relation, and
+SMS preference enum. Review and deploy them with `npx prisma migrate deploy`
+before rolling out this application version; they are not run at startup.
+The backend creates one persisted in-app reminder between 23 and 24 hours
+before an eligible appointment. Email and SMS preferences are stored, but
+message delivery requires configured providers and is not enabled by these
+migrations.
 
 All API routes use the `/api/v1` prefix. Authentication endpoints:
 
 - `POST /api/v1/auth/register` with `{ "prenom", "nom", "email", "password" }`
 - `POST /api/v1/auth/login` with `{ "email", "password" }`
+- `POST /api/v1/auth/clerk/sync` with a verified Clerk bearer token
 - `GET /api/v1/auth/me` requires a bearer token
 
 - `POST /api/v1/auth/change-password` requires the current and new password.
@@ -71,18 +126,13 @@ memberships, products and variants, and store-scoped inventory. These use
 domain-specific authorization and workflows instead of generic table CRUD.
 
 See `API_ENTITY_COVERAGE.md` for the status and management path of each Prisma
-model. Refresh/logout, email verification, password recovery, payments, and
-external AI/storage integrations are not enabled because the required schema
-or provider configuration is absent.
+model. Backend-native token refresh/logout endpoints and password recovery are
+not enabled; Clerk owns Google-session renewal and logout. Payments and some
+external integrations remain unavailable until configured.
 
 Authorized opticians can scan a frame inscription using
 `POST /api/v1/stores/{storeId}/inventory/scan-reference` with an `image`
 multipart field; the recognized inscription is returned for the stock form.
-See `API_ENTITY_COVERAGE.md` for the status and management path of each Prisma
-model. Refresh/logout, email verification, password recovery, payments, and
-other external AI/storage integrations are not enabled because their required
-schema or provider configuration is absent.
-
 
 Interactive API documentation is served at `http://localhost:3000/api/docs`
 when the backend is running. Use the **Authorize** button with a bearer access

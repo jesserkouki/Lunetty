@@ -1,0 +1,2 @@
+ALTER TYPE "NotificationType" ADD VALUE 'APPOINTMENT_REMINDER';
+ALTER TYPE "NotificationChannel" ADD VALUE 'SMS';

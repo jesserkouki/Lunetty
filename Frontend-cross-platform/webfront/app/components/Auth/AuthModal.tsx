@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { Eye, EyeOff, Glasses, Loader2, Store, User, X } from 'lucide-react';
+import { useClerk } from '@clerk/nextjs';
 import {
   AccountType, ApiError, AuthUser,
   login, register, resolveAccountType, setToken,
@@ -13,6 +14,8 @@ type Props = {
   open: boolean;
   dark: boolean;
   initialMode?: Mode;
+  initialSpace?: AccountType;
+  initialError?: string;
   onClose: () => void;
   onSuccess: (user: AuthUser, accountType: AccountType) => void;
 };
@@ -20,13 +23,22 @@ type Props = {
 const MIN_PASSWORD = 12;
 const EMPTY = { prenom: '', nom: '', email: '', password: '', confirm: '' };
 
-export default function AuthModal({ open, dark, initialMode = 'login', onClose, onSuccess }: Props) {
+export default function AuthModal({
+  open,
+  dark,
+  initialMode = 'login',
+  initialSpace = 'CLIENT',
+  initialError = '',
+  onClose,
+  onSuccess,
+}: Props) {
   const [mode, setMode] = useState<Mode>(initialMode);
-  const [space, setSpace] = useState<AccountType>('CLIENT');
+  const [space, setSpace] = useState<AccountType>(initialSpace);
   const [form, setForm] = useState(EMPTY);
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(initialError);
   const [loading, setLoading] = useState(false);
+  const clerk = useClerk();
 
   useEffect(() => {
     if (!open) return;
@@ -73,6 +85,40 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
       onSuccess(user, accountType);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Une erreur est survenue.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const continueWithGoogle = async () => {
+    if (loading) return;
+    setError('');
+    setLoading(true);
+    persistSpace(space);
+
+    try {
+      const client = clerk.client;
+      if (!client) {
+        throw new Error('Le service de connexion n’est pas encore prêt.');
+      }
+
+      if (isSignup) {
+        await client.signUp.authenticateWithRedirect({
+          strategy: 'oauth_google',
+          redirectUrl: '/sso-callback',
+          redirectUrlComplete: '/auth/complete',
+          continueSignUp: false,
+        });
+      } else {
+        await client.signIn.authenticateWithRedirect({
+          strategy: 'oauth_google',
+          redirectUrl: '/sso-callback',
+          redirectUrlComplete: '/auth/complete',
+          continueSignIn: false,
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'La connexion Google a échoué.');
     } finally {
       setLoading(false);
     }
@@ -126,7 +172,7 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
               {isSignup ? 'Créer un compte' : 'Connexion'}
             </h2>
             <span className="text-[9px] font-bold text-amber-600 dark:text-amber-200/80 tracking-[0.3em] uppercase mt-1">
-              Lunetty · Optical 3D Studio
+              Lunnetty
             </span>
           </div>
 
@@ -165,6 +211,28 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
               Créez d&apos;abord votre compte. Le rattachement de votre magasin se fera ensuite depuis l&apos;espace pro.
             </p>
           )}
+
+          <button
+            type="button"
+            onClick={continueWithGoogle}
+            disabled={loading}
+            className={`w-full py-3.5 rounded-2xl border font-semibold text-xs flex items-center justify-center gap-3 transition-colors disabled:opacity-60 ${
+              dark
+                ? 'border-white/15 bg-white/5 text-stone-100 hover:bg-white/10'
+                : 'border-stone-300 bg-white text-stone-800 hover:bg-stone-50'
+            }`}
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+              <span aria-hidden="true" className="font-bold text-base text-[#4285f4]">G</span>
+            )}
+            {isSignup ? "S'inscrire avec Google" : 'Continuer avec Google'}
+          </button>
+
+          <div className="flex items-center gap-3 my-5 text-[10px] uppercase tracking-widest text-stone-500">
+            <span className="h-px flex-1 bg-stone-300/70 dark:bg-white/10" />
+            ou avec votre email
+            <span className="h-px flex-1 bg-stone-300/70 dark:bg-white/10" />
+          </div>
 
           <form onSubmit={submit} className="space-y-4">
             {isSignup && (

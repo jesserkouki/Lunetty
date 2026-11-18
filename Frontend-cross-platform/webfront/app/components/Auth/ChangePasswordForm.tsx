@@ -1,13 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth as useClerkAuth } from '@clerk/nextjs';
 import { ApiError, changePassword, getToken } from '@/lib/auth';
 import { useAuth } from '@/lib/auth-context';
 
 const MIN_PASSWORD_LENGTH = 12;
 
 export function ChangePasswordForm() {
+  const router = useRouter();
+  const { isLoaded: clerkLoaded, isSignedIn: clerkSignedIn } = useClerkAuth();
   const { status } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -15,6 +19,12 @@ export function ChangePasswordForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (status === 'guest') {
+      router.replace('/sign-in?redirect_url=%2Fchange-password');
+    }
+  }, [router, status]);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -56,7 +66,20 @@ export function ChangePasswordForm() {
         <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#171514] p-8 text-center">
           <h1 className="text-2xl font-semibold">Changer le mot de passe</h1>
           <p className="mt-3 text-sm text-stone-400">
-            Connectez-vous pour modifier votre mot de passe.
+            Vérification de votre session…
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (clerkLoaded && clerkSignedIn) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-stone-950 px-4 text-stone-100">
+        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#171514] p-8 text-center">
+          <h1 className="text-2xl font-semibold">Changer le mot de passe</h1>
+          <p className="mt-3 text-sm text-stone-400">
+            Le mot de passe de ce compte est géré par Clerk et Google.
           </p>
           <Link className="mt-6 inline-block text-sm font-semibold text-amber-200" href="/">
             Retour à l’accueil

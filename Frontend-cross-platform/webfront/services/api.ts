@@ -4,6 +4,13 @@ export type JsonRecord = Record<string, unknown>;
 
 const TOKEN_KEY = "lunetty.access-token";
 const UNAUTHORIZED_EVENT = "lunetty:unauthorized";
+type ClerkTokenGetter = () => Promise<string | null>;
+
+let clerkTokenGetter: ClerkTokenGetter | null = null;
+
+export function setClerkTokenGetter(getter: ClerkTokenGetter | null): void {
+  clerkTokenGetter = getter;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -43,7 +50,7 @@ export async function apiRequest<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  const token = getAccessToken();
+  const token = clerkTokenGetter ? await clerkTokenGetter() : getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (
     init.body &&
@@ -81,6 +88,42 @@ export async function apiRequest<T>(
   }
 
   return payload as T;
+}
+
+export async function apiRequestBlob(
+  path: string,
+  init: RequestInit = {},
+): Promise<Blob> {
+  const headers = new Headers(init.headers);
+  const token = clerkTokenGetter ? await clerkTokenGetter() : getAccessToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(path), {
+      ...init,
+      headers,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      `Impossible de joindre l’API à ${apiUrl(path)}. Vérifiez que le backend est bien démarré et que LUNETTY_API_PROXY_TARGET pointe vers le bon service.`,
+    );
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => undefined);
+    if (response.status === 401 && token) {
+      clearAccessToken();
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    }
+    throw new ApiError(
+      response.status,
+      extractMessage(payload) ?? `La requête a échoué (${response.status})`,
+      payload,
+    );
+  }
+  return response.blob();
 }
 
 export function onUnauthorized(callback: () => void): () => void {
