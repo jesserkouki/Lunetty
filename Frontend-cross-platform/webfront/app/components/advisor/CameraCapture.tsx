@@ -17,6 +17,7 @@ const TIPS = ['Visage de face', 'Bonne lumière', 'Cheveux dégagés', 'Sans lun
 export default function CameraCapture({ onCapture, onClose, onPickFile }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const requestIdRef = useRef(0);
   const [phase, setPhase] = useState<Phase>('starting');
   const [count, setCount] = useState(3);
   const [shot, setShot] = useState<{ image: ChatImage; preview: string } | null>(null);
@@ -27,40 +28,64 @@ export default function CameraCapture({ onCapture, onClose, onPickFile }: Props)
     streamRef.current = null;
   }, []);
 
-  const startCamera = useCallback(async () => {
-    setPhase('starting');
-    setShot(null);
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('unsupported');
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => undefined);
-      }
-      setPhase('live');
-    } catch (e) {
-      const name = e instanceof DOMException ? e.name : '';
-      setErrorMsg(
-        name === 'NotAllowedError'
-          ? "L'accès à la caméra est bloqué. Autorisez-le dans votre navigateur, ou choisissez une photo existante."
-          : name === 'NotFoundError'
-            ? "Aucune caméra détectée. Vous pouvez choisir une photo existante."
-            : "La caméra n'est pas disponible (elle nécessite https ou localhost). Vous pouvez choisir une photo existante.",
-      );
-      setPhase('error');
+  const requestCamera = useCallback(() =>
+    Promise.resolve().then(() => {
+      const request = navigator.mediaDevices?.getUserMedia
+        ? navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } },
+            audio: false,
+          })
+        : Promise.reject(new Error('unsupported'));
+      return request;
+    }), []);
+
+  const connectStream = useCallback(async (stream: MediaStream, requestId: number) => {
+    if (requestId !== requestIdRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
     }
+    streamRef.current = stream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play().catch(() => undefined);
+    }
+    if (requestId === requestIdRef.current) setPhase('live');
   }, []);
 
+  const handleCameraError = useCallback((error: unknown, requestId: number) => {
+    if (requestId !== requestIdRef.current) return;
+    const name = error instanceof DOMException ? error.name : '';
+    setErrorMsg(
+      name === 'NotAllowedError'
+        ? "L'accès à la caméra est bloqué. Autorisez-le dans votre navigateur, ou choisissez une photo existante."
+        : name === 'NotFoundError'
+          ? "Aucune caméra détectée. Vous pouvez choisir une photo existante."
+          : "La caméra n'est pas disponible (elle nécessite https ou localhost). Vous pouvez choisir une photo existante.",
+    );
+    setPhase('error');
+  }, []);
+
+  const startCamera = useCallback(() => {
+    stopStream();
+    setPhase('starting');
+    setShot(null);
+    setErrorMsg('');
+    const requestId = ++requestIdRef.current;
+    void requestCamera()
+      .then((stream) => connectStream(stream, requestId))
+      .catch((error: unknown) => handleCameraError(error, requestId));
+  }, [connectStream, handleCameraError, requestCamera, stopStream]);
+
   useEffect(() => {
-    startCamera();
-    return stopStream;
-  }, [startCamera, stopStream]);
+    const requestId = ++requestIdRef.current;
+    void requestCamera()
+      .then((stream) => connectStream(stream, requestId))
+      .catch((error: unknown) => handleCameraError(error, requestId));
+    return () => {
+      requestIdRef.current += 1;
+      stopStream();
+    };
+  }, [connectStream, handleCameraError, requestCamera, stopStream]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -68,19 +93,7 @@ export default function CameraCapture({ onCapture, onClose, onPickFile }: Props)
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Compte à rebours 3-2-1 puis capture
-  useEffect(() => {
-    if (phase !== 'counting') return;
-    if (count === 0) {
-      capture();
-      return;
-    }
-    const t = setTimeout(() => setCount((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, count]);
-
-  function capture() {
+  const capture = useCallback(() => {
     const v = videoRef.current;
     if (!v || !v.videoWidth) return;
     // Réduit à 768px max (JPEG) : poids limité, photo jamais conservée côté serveur.
@@ -95,7 +108,18 @@ export default function CameraCapture({ onCapture, onClose, onPickFile }: Props)
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
     setShot({ image: { media_type: 'image/jpeg', data: dataUrl.split(',')[1] }, preview: dataUrl });
     setPhase('preview');
-  }
+  }, []);
+
+  // Compte à rebours 3-2-1 puis capture
+  useEffect(() => {
+    if (phase !== 'counting') return;
+    if (count === 0) {
+      capture();
+      return;
+    }
+    const t = setTimeout(() => setCount((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [phase, count, capture]);
 
   function startCountdown() {
     setCount(3);
