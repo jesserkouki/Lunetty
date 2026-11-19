@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Eye, EyeOff, Glasses, Loader2, Store, User, X } from 'lucide-react';
 import {
   AccountType, ApiError, AuthUser,
-  login, register, resolveAccountType, setToken,
+  getSpace, login, register, resolveAccountType, setToken,
   setSpace as persistSpace,
 } from '@/lib/auth';
 
@@ -11,7 +11,6 @@ type Mode = 'login' | 'signup';
 
 type Props = {
   open: boolean;
-  dark: boolean;
   initialMode?: Mode;
   onClose: () => void;
   onSuccess: (user: AuthUser, accountType: AccountType) => void;
@@ -20,9 +19,9 @@ type Props = {
 const MIN_PASSWORD = 12;
 const EMPTY = { prenom: '', nom: '', email: '', password: '', confirm: '' };
 
-export default function AuthModal({ open, dark, initialMode = 'login', onClose, onSuccess }: Props) {
+export default function AuthModal({ open, initialMode = 'login', onClose, onSuccess }: Props) {
   const [mode, setMode] = useState<Mode>(initialMode);
-  const [space, setSpace] = useState<AccountType>('CLIENT');
+  const [space, setSpace] = useState<AccountType>(getSpace);
   const [form, setForm] = useState(EMPTY);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -78,62 +77,54 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
     }
   };
 
-  const inputCls = `w-full border rounded-2xl px-4 py-3 text-xs outline-none focus:border-amber-500 transition-colors ${
-    dark ? 'bg-[#121110] border-white/10 text-stone-200' : 'bg-stone-50 border-stone-300 text-stone-900'
-  }`;
-  const labelCls = 'text-[10px] font-bold uppercase tracking-widest text-stone-500 block mb-1.5';
+  const inputCls =
+    'w-full border border-line bg-white/70 px-4 py-3 text-base font-medium text-foreground outline-none transition-colors placeholder:text-muted/70 focus:border-accent focus:ring-2 focus:ring-accent/15';
+  const labelCls = 'mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted';
   const pwLen = Math.min(form.password.length, MIN_PASSWORD);
 
   const segment = (active: boolean) =>
-    `flex items-center justify-center gap-2 py-3 text-[11px] font-bold rounded-2xl uppercase tracking-wider transition-all ${
+    `flex items-center justify-center gap-2 py-3 text-sm font-bold uppercase tracking-wider transition-all ${
       active
-        ? dark ? 'bg-stone-100 text-stone-950 shadow-xl' : 'bg-stone-900 text-white shadow-xl'
-        : 'text-stone-500 hover:text-amber-600 dark:hover:text-amber-200'
+        ? 'bg-foreground text-background shadow-sm'
+        : 'text-muted hover:text-accent'
     }`;
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
       onMouseDown={(e) => e.target === e.currentTarget && !loading && onClose()}
     >
       <div
         role="dialog"
         aria-modal="true"
-        className={`border w-full max-w-md rounded-3xl p-8 shadow-2xl relative my-8 overflow-hidden backdrop-blur-2xl ${
-          dark ? 'bg-[#171514]/95 border-white/10' : 'bg-white/95 border-stone-200'
-        }`}
+        className="auth-modal-card relative my-8 w-full max-w-md overflow-hidden border border-line bg-background p-8 shadow-[0_24px_80px_-28px_rgba(36,31,25,0.42)]"
       >
-        {/* Ambient Warm Glow, matching page.tsx hero cards */}
-        <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[100px] bg-amber-400 opacity-20 pointer-events-none" />
+        <div aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-accent" />
 
         <button
           onClick={onClose}
           aria-label="Fermer"
-          className="absolute top-5 right-5 p-2 text-stone-400 hover:text-stone-700 dark:hover:text-white z-10 transition-colors"
+          className="absolute right-5 top-5 z-10 p-2 text-muted transition-colors hover:bg-accent/10 hover:text-foreground"
         >
           <X className="w-5 h-5" />
         </button>
 
         <div className="relative">
           {/* Brand mark */}
-          <div className="flex flex-col items-center mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-stone-200 via-amber-200 to-amber-500 p-[1.5px]">
-              <div className={`w-full h-full rounded-[14px] flex items-center justify-center ${dark ? 'bg-[#121110]' : 'bg-stone-900'}`}>
-                <Glasses className="w-6 h-6 text-amber-200" />
-              </div>
+          <div className="mb-6 flex flex-col items-center">
+            <div className="flex h-12 w-12 items-center justify-center border border-accent/35 bg-accent/10">
+              <Glasses className="h-6 w-6 text-accent" />
             </div>
-            <h2 className={`mt-4 text-2xl font-light tracking-wider font-display ${dark ? 'text-white' : 'text-stone-900'}`}>
+            <h2 className="mt-4 text-3xl font-semibold tracking-wide text-foreground">
               {isSignup ? 'Créer un compte' : 'Connexion'}
             </h2>
-            <span className="text-[9px] font-bold text-amber-600 dark:text-amber-200/80 tracking-[0.3em] uppercase mt-1">
-              Lunetty · Optical 3D Studio
+            <span className="mt-1 text-[11px] font-bold uppercase tracking-[0.2em] text-accent">
+              Lunetty · L&apos;optique, autrement
             </span>
           </div>
 
           {/* Space Segmented Switcher: Client / Pro */}
-          <div className={`grid grid-cols-2 gap-1 p-1 rounded-2xl mb-3 border ${
-            dark ? 'bg-[#100f0e] border-white/10' : 'bg-stone-100 border-stone-200'
-          }`}>
+          <div className="mb-3 grid grid-cols-2 gap-1 border border-line bg-white/50 p-1">
             <button type="button" className={segment(!isPro)} onClick={() => { setSpace('CLIENT'); setError(''); }}>
               <User className="w-3.5 h-3.5" /> Espace Client
             </button>
@@ -143,9 +134,7 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
           </div>
 
           {/* Mode Segmented Switcher: login / signup */}
-          <div className={`grid grid-cols-2 gap-1 p-1 rounded-2xl mb-6 border ${
-            dark ? 'bg-[#100f0e] border-white/10' : 'bg-stone-100 border-stone-200'
-          }`}>
+          <div className="mb-6 grid grid-cols-2 gap-1 border border-line bg-white/50 p-1">
             {(['login', 'signup'] as const).map((m) => (
               <button
                 key={m}
@@ -159,9 +148,7 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
           </div>
 
           {isSignup && isPro && (
-            <p className={`text-[11px] leading-relaxed rounded-2xl px-4 py-3 mb-4 border ${
-              dark ? 'bg-amber-200/5 border-amber-200/20 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'
-            }`}>
+            <p className="mb-4 border border-accent/25 bg-accent/10 px-4 py-3 text-[11px] leading-relaxed text-foreground">
               Créez d&apos;abord votre compte. Le rattachement de votre magasin se fera ensuite depuis l&apos;espace pro.
             </p>
           )}
@@ -206,13 +193,13 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
 
               {isSignup && (
                 <div className="mt-2.5 flex items-center gap-2">
-                  <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${dark ? 'bg-white/10' : 'bg-stone-200'}`}>
+                  <div className="h-1.5 flex-1 overflow-hidden bg-foreground/10">
                     <div
-                      className={`h-full rounded-full transition-all duration-300 ${pwLen >= MIN_PASSWORD ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                      className={`h-full transition-all duration-300 ${pwLen >= MIN_PASSWORD ? 'bg-emerald-700' : 'bg-accent'}`}
                       style={{ width: `${(pwLen / MIN_PASSWORD) * 100}%` }}
                     />
                   </div>
-                  <span className="text-[10px] font-mono text-stone-500">{pwLen}/{MIN_PASSWORD}</span>
+                  <span className="font-mono text-[10px] text-muted">{pwLen}/{MIN_PASSWORD}</span>
                 </div>
               )}
             </div>
@@ -227,24 +214,22 @@ export default function AuthModal({ open, dark, initialMode = 'login', onClose, 
             )}
 
             {error && (
-              <div role="alert" className="text-xs font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-2xl px-4 py-3">
+              <div role="alert" className="border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-800">
                 {error}
               </div>
             )}
 
             <button type="submit" disabled={loading}
-              className={`w-full py-4 rounded-2xl font-bold text-xs uppercase tracking-wider shadow-xl disabled:opacity-60 flex items-center justify-center gap-2 transition-all ${
-                dark ? 'bg-stone-100 hover:bg-amber-100 text-stone-950' : 'bg-stone-900 hover:bg-stone-800 text-white'
-              }`}>
+              className="flex w-full items-center justify-center gap-2 bg-foreground py-4 text-sm font-bold uppercase tracking-wider text-background shadow-sm transition-colors hover:bg-accent disabled:opacity-60">
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               {isSignup ? 'Créer mon compte' : isPro ? "Accéder à l'espace pro" : 'Se connecter'}
             </button>
 
-            <p className="text-center text-xs text-stone-500 pt-1">
+            <p className="pt-1 text-center text-sm text-muted">
               {isSignup ? 'Déjà un compte ?' : 'Pas encore de compte ?'}{' '}
               <button type="button"
                 onClick={() => { setMode(isSignup ? 'login' : 'signup'); setError(''); }}
-                className="font-bold text-amber-600 dark:text-amber-200 hover:underline">
+                className="font-bold text-accent hover:underline">
                 {isSignup ? 'Se connecter' : "S'inscrire"}
               </button>
             </p>

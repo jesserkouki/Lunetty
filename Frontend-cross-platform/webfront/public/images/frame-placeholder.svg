@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" fill="none">
+  <defs>
+    <linearGradient id="frame" x1="140" y1="170" x2="850" y2="430" gradientUnits="userSpaceOnUse"><stop stop-color="#f0d7a1"/><stop offset=".48" stop-color="#a77c43"/><stop offset="1" stop-color="#e7c889"/></linearGradient>
+    <linearGradient id="lens" x1="250" y1="190" x2="420" y2="420" gradientUnits="userSpaceOnUse"><stop stop-color="#dce8ee" stop-opacity=".24"/><stop offset="1" stop-color="#dce8ee" stop-opacity=".02"/></linearGradient>
+    <filter id="shadow" x="30" y="100" width="940" height="420" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="9"/></filter>
+  </defs>
+  <ellipse cx="500" cy="450" rx="360" ry="25" fill="#050607" fill-opacity=".52" filter="url(#shadow)"/>
+  <path d="M116 254c14-73 47-105 111-105h154c65 0 101 36 107 103l-12 103c-7 58-43 87-104 87H236c-65 0-101-33-111-96l-9-92Z" fill="url(#lens)" stroke="url(#frame)" stroke-width="16"/>
+  <path d="M512 252c7-67 42-103 107-103h154c64 0 98 32 111 105l-9 91c-10 64-46 97-111 97H649c-60 0-96-29-103-87l-12-103Z" fill="url(#lens)" stroke="url(#frame)" stroke-width="16"/>
+  <path d="M485 245c15-25 34-37 57-37s42 12 57 37M116 224 37 198m847 26 79-26" stroke="url(#frame)" stroke-linecap="round" stroke-width="16"/>
+  <path d="M157 220c13-34 34-49 68-49h119m160 49c14-34 36-49 70-49h118" stroke="#fff4d7" stroke-opacity=".72" stroke-linecap="round" stroke-width="7"/>
+</svg>

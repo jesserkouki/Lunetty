@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" fill="none">
+  <defs><linearGradient id="m" x1="140" y1="150" x2="860" y2="440"><stop stop-color="#d7bd93"/><stop offset=".5" stop-color="#6e5341"/><stop offset="1" stop-color="#d5aa78"/></linearGradient><linearGradient id="l" x1="240" y1="170" x2="400" y2="420"><stop stop-color="#d4e4e6" stop-opacity=".22"/><stop offset="1" stop-color="#849a95" stop-opacity=".02"/></linearGradient><filter id="s"><feGaussianBlur stdDeviation="10"/></filter></defs>
+  <ellipse cx="500" cy="456" rx="360" ry="24" fill="#000" fill-opacity=".52" filter="url(#s)"/>
+  <path d="M112 208c34-51 88-76 166-76h35c61 0 100 22 123 67l64 155c-45 54-100 81-165 81h-58c-83 0-140-57-165-170Zm776 0c-34-51-88-76-166-76h-35c-61 0-100 22-123 67l-64 155c45 54 100 81 165 81h58c83 0 140-57 165-170Z" fill="url(#l)" stroke="url(#m)" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M437 222c18-19 38-28 63-28s45 9 63 28M112 205l-82-28m858 28 82-28" stroke="url(#m)" stroke-width="18" stroke-linecap="round"/>
+  <path d="M171 180c33-28 70-42 112-42m434 42c-33-28-70-42-112-42" stroke="#fff0d6" stroke-opacity=".7" stroke-width="7" stroke-linecap="round"/>
+</svg>

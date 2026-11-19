@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1500" width="1200" height="1500" role="img" aria-label="Finitions et polissage">
+<defs><radialGradient id="g" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="#352c27"/><stop offset="1" stop-color="#100c0b"/></radialGradient></defs>
+<rect width="1200" height="1500" fill="url(#g)"/>
+<rect x="204.0" y="651.0" width="360.0" height="198.00000000000003" rx="55.44000000000001" fill="none" stroke="#d6bda9" stroke-width="7.2"/><rect x="636.0" y="651.0" width="360.0" height="198.00000000000003" rx="55.44000000000001" fill="none" stroke="#d6bda9" stroke-width="7.2"/><path d="M564.0 730.2 Q600.0 686.64 636.0 730.2" fill="none" stroke="#d6bda9" stroke-width="7.2"/><path d="M204.0 710.4 L119.99999999999999 720.3" stroke="#d6bda9" stroke-width="7.2"/><path d="M996.0 710.4 L1080.0 720.3" stroke="#d6bda9" stroke-width="7.2"/>
+</svg>

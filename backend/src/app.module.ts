@@ -24,6 +24,8 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { AdminModule } from './admin/admin.module';
 import { VirtualTryOnModule } from './virtual-try-on/virtual-try-on.module';
 import { AuditModule } from './audit/audit.module';
+import { FrameAdvisorModule } from './frame-advisor/frame-advisor.module';
+import { OpticianAssistantModule } from './optician-assistant/optician-assistant.module';
 
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -59,6 +61,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     AdminModule,
     VirtualTryOnModule,
     AuditModule,
+    FrameAdvisorModule,
+    OpticianAssistantModule,
 
   ],
   controllers: [AppController],

@@ -27,6 +27,7 @@ import {
   IconX,
   IconChevronRight,
 } from "../ui/Icons";
+import { OpticianAssistantPanel } from "./OpticianAssistantPanel";
 
 const opticianNavGroups = [
   {
@@ -146,7 +147,7 @@ export function AppShell({
   );
 
   return (
-    <div className={`app-shell opt-shell${isSidebarCollapsed ? " sidebar-collapsed" : " sidebar-expanded"}`}>
+    <div className={`app-shell opt-shell${portal === "optician" ? " optician-portal" : ""}${isSidebarCollapsed ? " sidebar-collapsed" : " sidebar-expanded"}`}>
       {/* Sidebar */}
       <aside className="sidebar opt-sidebar">
         {/* Brand */}
@@ -327,49 +328,13 @@ export function AppShell({
       </main>
       {portal === "optician" && (
         <aside className="chatbot-placeholder" aria-label="Assistant boutique">
-          <section
-            className={`chatbot-panel opt-chatbot-card${chatbotOpen ? " chatbot-panel-open" : ""}`}
-            aria-label="Conversation avec l’assistant Lunetty"
-            aria-hidden={!chatbotOpen}
-            inert={!chatbotOpen}
-            role="dialog"
-          >
-            <div className="opt-chatbot-head">
-              <div className="opt-icon-bubble gold">
-                <IconSparkles height={18} width={18} />
-              </div>
-              <div className="opt-chatbot-title">
-                <h3>Assistant Opticien Lunetty</h3>
-                <p className="opt-chatbot-sub">Votre assistant boutique</p>
-              </div>
-              <button
-                className="opt-chatbot-close"
-                onClick={() => setChatbotOpen(false)}
-                type="button"
-                aria-label="Fermer l’assistant"
-                tabIndex={chatbotOpen ? 0 : -1}
-              >
-                <IconX height={18} width={18} />
-              </button>
-            </div>
-            <div className="opt-chatbot-body">
-              <span className="opt-chatbot-coming-soon">Bientôt disponible</span>
-              <p className="opt-chatbot-message">
-                L’assistant boutique arrive prochainement. La conversation n’est pas encore activée.
-              </p>
-            </div>
-            <div className="opt-chatbot-composer">
-              <input
-                aria-label="Message"
-                disabled
-                placeholder="Conversation bientôt disponible"
-                tabIndex={chatbotOpen ? 0 : -1}
-              />
-              <button type="button" disabled aria-label="Envoyer le message">
-                <IconSparkles height={16} width={16} />
-              </button>
-            </div>
-          </section>
+          <OpticianAssistantPanel
+            key={storeId || "no-store"}
+            open={chatbotOpen}
+            storeId={storeId}
+            storeName={activeStore?.store.nom ?? "Boutique"}
+            onClose={() => setChatbotOpen(false)}
+          />
           <button
             className="chatbot-trigger opt-chatbot-btn"
             onClick={() => setChatbotOpen((open) => !open)}

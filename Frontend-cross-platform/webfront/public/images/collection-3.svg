@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" width="800" height="1000" role="img" aria-label="Monture rectangulaire">
+<defs><radialGradient id="g" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="#2c3238"/><stop offset="1" stop-color="#0e1012"/></radialGradient></defs>
+<rect width="800" height="1000" fill="url(#g)"/>
+<rect x="136.0" y="434.0" width="240.0" height="132.0" rx="36.96" fill="none" stroke="#b9c4cc" stroke-width="4.8"/><rect x="424.0" y="434.0" width="240.0" height="132.0" rx="36.96" fill="none" stroke="#b9c4cc" stroke-width="4.8"/><path d="M376.0 486.8 Q400.0 457.76 424.0 486.8" fill="none" stroke="#b9c4cc" stroke-width="4.8"/><path d="M136.0 473.6 L80.0 480.2" stroke="#b9c4cc" stroke-width="4.8"/><path d="M664.0 473.6 L720.0 480.2" stroke="#b9c4cc" stroke-width="4.8"/>
+</svg>

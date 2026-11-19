@@ -114,4 +114,46 @@ describe('StoreOrdersService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
     expect(tx.commande.updateMany).not.toHaveBeenCalled();
   });
+
+  it('rejects a confirmed status change if the order changed after proposal', async () => {
+    const tx = {
+      commande: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'order-id',
+          numero_commande: 'LUN-100',
+          statut: StatutCommande.CONFIRME,
+        }),
+        updateMany: jest.fn(),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const authorization = {
+      requireActiveMembership: jest
+        .fn()
+        .mockResolvedValue({ role: RoleMembre.GERANT }),
+      requirePermission: jest.fn(),
+      effectivePermissions: jest.fn().mockReturnValue(new Set<string>()),
+    };
+    const service = new StoreOrdersService(
+      prisma as unknown as PrismaService,
+      authorization as unknown as StoreAuthorizationService,
+      { record: jest.fn() } as never,
+    );
+
+    await expect(
+      service.updateStatus(
+        'manager-id',
+        'store-id',
+        'order-id',
+        { status: StatutCommande.EN_TRAITEMENT },
+        StatutCommande.PAYE,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(authorization.requirePermission).not.toHaveBeenCalled();
+    expect(tx.commande.updateMany).not.toHaveBeenCalled();
+  });
 });
