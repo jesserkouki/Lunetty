@@ -102,6 +102,46 @@ describe('InventoryService', () => {
     expect(tx.mouvementStock.create).not.toHaveBeenCalled();
   });
 
+  it('rejects a confirmed adjustment if stock changed after proposal', async () => {
+    const tx = {
+      stock: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'stock-id',
+          quantite_disponible: 11,
+          quantite_reservee: 2,
+        }),
+        updateMany: jest.fn(),
+      },
+      mouvementStock: { create: jest.fn() },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const service = new InventoryService(
+      prisma as unknown as PrismaService,
+      authorization as unknown as StoreAuthorizationService,
+      audit as never,
+    );
+
+    await expect(
+      service.createMovement(
+        'user-id',
+        'store-id',
+        'stock-id',
+        {
+          type: TypeMouvementStock.AJUSTEMENT,
+          quantite: 3,
+          note: 'Correction après inventaire',
+        },
+        10,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.stock.updateMany).not.toHaveBeenCalled();
+    expect(tx.mouvementStock.create).not.toHaveBeenCalled();
+  });
+
   it('creates a standalone prescription-glasses stock item', async () => {
     const stock = { id: 'stock-id', quantite_disponible: 0 };
     const tx = {

@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Glasses, Sparkles, Sun, Moon, Menu, X, User, LogOut, ArrowUpRight, Settings, Store } from "lucide-react";
+import LogoWordmark from "../ui/LogoWordmark";
 
 type Props = {
   themeMode: string;
@@ -127,9 +128,7 @@ export default function Navbar({
                 </span>
               </span>
               <span className="text-left leading-none">
-                <span className={`block text-[17px] font-black tracking-[0.18em] uppercase ${dark ? "text-white" : "text-stone-950"}`}>
-                  Lunetty
-                </span>
+                <LogoWordmark variant={dark ? "gold" : "dark"} size="sm" as="div" spacing="0.14em" />
                 <span
                   className={`block text-[9px] font-bold text-amber-600 dark:text-amber-200/80 tracking-[0.22em] uppercase overflow-hidden transition-all duration-500 ${
                     scrolled ? "max-h-0 opacity-0 mt-0" : "max-h-4 opacity-100 mt-1"

@@ -55,12 +55,24 @@ export function safeInternalRedirect(value: string | null, origin: string): stri
 
 // ---- token storage (guarded: storage can throw in private mode) ----
 export const getToken = () => {
-  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
-};
-export const setToken = (token: string | null) => {
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
+    return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+export const setToken = (token: string | null, remember = true) => {
+  try {
+    if (!token) {
+      localStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(TOKEN_KEY);
+      return;
+    }
+
+    const storage = remember ? localStorage : sessionStorage;
+    const otherStorage = remember ? sessionStorage : localStorage;
+    storage.setItem(TOKEN_KEY, token);
+    otherStorage.removeItem(TOKEN_KEY);
   } catch {}
 };
 

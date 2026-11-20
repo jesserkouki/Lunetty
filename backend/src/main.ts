@@ -1,12 +1,16 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express'; // AJOUT
 import { AppModule, ObserveInstrument } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     instrument: ObserveInstrument,
+    bodyParser: false, // AJOUT : on règle nous-mêmes la taille max des requêtes
   });
+  app.use(json({ limit: '2mb' })); // AJOUT : autorise les selfies (base64)
+  app.use(urlencoded({ extended: true, limit: '2mb' })); // AJOUT
   app.setGlobalPrefix('api/v1');
   app.enableCors({
     origin: (process.env.CORS_ORIGINS ?? 'http://localhost:3001')

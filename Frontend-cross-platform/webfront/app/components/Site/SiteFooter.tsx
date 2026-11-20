@@ -1,16 +1,16 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Glasses } from "lucide-react";
+import LogoWordmark from "../ui/LogoWordmark";
 
 export default function Footer({
   dark, onNavigate,
 }: { dark: boolean; onNavigate: (tab: string) => void }) {
   // Année calculée côté navigateur (évite l'erreur new Date() au prérendu Next.js)
-  const [year, setYear] = useState(2026);
-  useEffect(() => { setYear(new Date().getFullYear()); }, []);
-  const muted = dark ? "text-stone-400" : "text-stone-500";
-  const head = dark ? "text-white" : "text-stone-900";
-  const link = `text-sm ${muted} hover:text-amber-600 transition-colors text-left`;
+ const year = 2026;
+ const muted = dark ? "text-stone-400" : "text-stone-500";
+ const head = dark ? "text-white" : "text-stone-900";
+ const link = `text-sm ${muted} hover:text-amber-600 transition-colors text-left`;
   return (
     <footer className={`relative z-10 border-t ${dark ? "border-white/10 bg-[#0e0d0c]" : "border-stone-200 bg-[#F3EFE6]"}`}>
       <div className="max-w-[1760px] mx-auto px-4 sm:px-8 lg:px-12 2xl:px-16 py-14 grid grid-cols-2 md:grid-cols-4 gap-10">
@@ -19,7 +19,7 @@ export default function Footer({
             <span className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-200 to-amber-500 flex items-center justify-center">
               <Glasses className="w-4 h-4 text-stone-900" />
             </span>
-            <span className={`font-black tracking-[0.18em] uppercase ${head}`}>Lunetty</span>
+            <LogoWordmark variant={dark ? "gold" : "dark"} size="sm" as="div" spacing="0.14em" />
           </div>
           <p className={`text-sm mt-4 max-w-xs leading-relaxed ${muted}`}>
             Essayez vos lunettes en 3D et réservez chez un opticien près de chez vous.

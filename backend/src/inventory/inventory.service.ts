@@ -338,6 +338,7 @@ export class InventoryService {
     storeId: string,
     stockId: string,
     input: CreateStockMovementDto,
+    expectedQuantityOnHand?: number,
   ) {
     await this.authorize(userId, storeId, 'inventory.adjust_stock');
     if (
@@ -399,6 +400,14 @@ export class InventoryService {
       });
       if (!current) {
         throw new NotFoundException('Inventory record not found');
+      }
+      if (
+        expectedQuantityOnHand !== undefined &&
+        current.quantite_disponible !== expectedQuantityOnHand
+      ) {
+        throw new ConflictException(
+          'Inventory changed since the proposal was prepared; reload and retry',
+        );
       }
 
       const available = current.quantite_disponible - current.quantite_reservee;

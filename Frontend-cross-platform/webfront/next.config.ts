@@ -1,13 +1,29 @@
+
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["127.0.0.1", "19x55th5-3001.eun1.devtunnels.ms"],
+  allowedDevOrigins: [
+    "127.0.0.1",
+    "19x55th5-3001.eun1.devtunnels.ms",
+  ],
+
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+      },
+    ],
+  },
+
   async rewrites() {
     const apiOrigin = (
       process.env.LUNETTY_API_PROXY_TARGET ??
       process.env.API_URL ??
       "http://localhost:3000"
     ).replace(/\/+$/, "");
+
     return [
       {
         source: "/api/v1/:path*",
@@ -19,11 +35,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
   experimental: {
     agentFeedback: true,
+    agentUpgrade: "security",
   },
+
   cacheComponents: true,
   partialPrefetching: true,
+
   turbopack: {
     root: process.cwd(),
     rules: {

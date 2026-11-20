@@ -143,6 +143,7 @@ export class StoreOrdersService {
     storeId: string,
     orderId: string,
     input: UpdateStoreOrderStatusDto,
+    expectedStatus?: StatutCommande,
   ) {
     await this.storeAuthorization.requireActiveMembership(userId, storeId);
     return this.prisma.$transaction(async (tx) => {
@@ -151,6 +152,11 @@ export class StoreOrdersService {
         select: { id: true, numero_commande: true, statut: true },
       });
       if (!current) throw new NotFoundException('Order not found');
+      if (expectedStatus && current.statut !== expectedStatus) {
+        throw new ConflictException(
+          'Order status changed since the proposal was prepared; reload and retry',
+        );
+      }
       await this.authorize(
         userId,
         storeId,

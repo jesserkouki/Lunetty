@@ -1,26 +1,409 @@
 @import "tailwindcss";
 
-/* Le variant dark: suit le thème du site (classe .dark), pas le système */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Charte Lunetty : beige ivoire, encre foncée et bronze. */
 :root {
-  --background: #fbfaf7;
-  --foreground: #1c1917;
+  --background: #f5f0e7;
+  --foreground: #241f19;
+  --muted: #6b6257;
+  --line: rgba(36, 31, 25, 0.16);
+  /* Bronze : assez contrasté pour le petit texte sur fond champagne. */
+  --accent: #806334;
+  --lunetty-cream: #f3eee6;
+  --lunetty-surface: #fffdf9;
+  --lunetty-ink: #1a1713;
+  --lunetty-muted: #5d554b;
+  --lunetty-gold: #c9a45c;
+  --lunetty-gold-strong: #8a6a2f;
+  --lunetty-line: rgba(26, 23, 19, 0.12);
+  --lunetty-danger: #8c4c43;
+  --lunetty-logo-color: #1a1713;
+  --lunetty-logo-background: none;
+  --lunetty-logo-fill: #1a1713;
+  --lunetty-logo-stroke: 0 transparent;
+  --lunetty-logo-shadow: none;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-lunetty-cream: var(--lunetty-cream);
+  --color-lunetty-surface: var(--lunetty-surface);
+  --color-lunetty-ink: var(--lunetty-ink);
+  --color-lunetty-muted: var(--lunetty-muted);
+  --color-lunetty-gold: var(--lunetty-gold);
+  --color-lunetty-gold-strong: var(--lunetty-gold-strong);
+  --color-lunetty-line: var(--lunetty-line);
+  --color-lunetty-danger: var(--lunetty-danger);
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-cormorant);
+  --ease-lux: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html {
-  scroll-behavior: smooth;
+  background: var(--background);
+  color-scheme: light;
+}
+
+.dark {
+  --background: #181613;
+  --foreground: #f5f0e7;
+  --muted: #c9bdab;
+  --line: rgba(245, 240, 231, 0.18);
+  --accent: #c6a674;
+  --lunetty-cream: #171512;
+  --lunetty-surface: #211e19;
+  --lunetty-ink: #f4efe6;
+  --lunetty-muted: #c6bbab;
+  --lunetty-gold: #d7b76d;
+  --lunetty-gold-strong: #e3c991;
+  --lunetty-line: rgba(244, 239, 230, 0.14);
+  --lunetty-danger: #d18a7e;
+  --lunetty-logo-color: #c9a45c;
+  --lunetty-logo-background: linear-gradient(180deg, #f1d58a 0%, #c9a45c 55%, #8a6a2f 100%);
+  --lunetty-logo-fill: transparent;
+  --lunetty-logo-stroke: 0.65px #2a1f10;
+  --lunetty-logo-shadow: 0 -0.5px 0 rgba(255, 255, 255, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+.client-dashboard,
+.account-settings {
+  background-color: var(--lunetty-cream);
+  color: var(--lunetty-ink);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+.client-dashboard :is(button, a),
+.account-settings :is(button, a) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.client-dashboard :is(button, a):focus-visible,
+.account-settings :is(button, a):focus-visible,
+.account-settings :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--lunetty-gold-strong);
+  outline-offset: 3px;
+}
+
+.client-dashboard [class*="text-xs"],
+.client-dashboard [class*="text-[11px]"],
+.client-dashboard [class*="text-[10px]"],
+.account-settings [class*="text-xs"],
+.account-settings [class*="text-[11px]"],
+.account-settings [class*="text-[10px]"] {
+  font-size: 0.875rem;
+  line-height: 1.45;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
+
+.site-header :is(a, button, span),
+.site-header-menu :is(a, button, span) {
+  font-family: var(--font-jost), Montserrat, Arial, sans-serif;
+}
+
+.site-header .site-header-logo {
+  font-family: var(--font-cormorant), Georgia, serif;
+  text-shadow: 1px 1px 0 #c6a674, 2px 2px 0 #806334, 4px 5px 12px rgba(36, 31, 25, 0.22);
+}
+
+.site-header {
+  --background: #ffffff;
+  --foreground: #241f19;
+  --line: rgba(36, 31, 25, 0.16);
+}
+
+.site-header nav a {
+  color: var(--foreground);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  transition: opacity 180ms ease;
+}
+
+.site-header nav a:hover {
+  opacity: 0.72;
+}
+
+.site-header-menu :is(a, button, span) {
+  font-weight: 600;
+}
+
+.auth-modal-card {
+  font-family: var(--font-jost), Montserrat, Arial, sans-serif;
+}
+
+.auth-modal-card :is(h2, label, button, input, p, span) {
+  font-family: inherit;
+}
+
+.auth-modal-card label {
+  color: #51483e;
+}
+
+.marketplace-carousel {
+  scroll-padding-inline: 1.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: #b8a98f transparent;
+}
+
+.optician-carousel {
+  scroll-padding-inline: 1.25rem;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.optician-carousel::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
+.tilt-card {
+  perspective: 1000px;
+  touch-action: pan-y;
+}
+
+.tilt-card__surface {
+  transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg))
+    scale(var(--tilt-scale, 1));
+  transform-style: preserve-3d;
+  transition:
+    transform 520ms cubic-bezier(0.2, 0.75, 0.25, 1),
+    box-shadow 520ms cubic-bezier(0.2, 0.75, 0.25, 1);
+  will-change: transform;
+}
+
+.tilt-card[data-tilt-active="true"] .tilt-card__surface {
+  transition:
+    transform 75ms ease-out,
+    box-shadow 180ms ease-out;
+  box-shadow: 0 28px 58px rgba(8, 7, 6, 0.42);
+}
+
+.tilt-card__glare {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at var(--glare-x, 50%) var(--glare-y, 50%),
+    rgba(255, 249, 235, 0.2),
+    rgba(255, 249, 235, 0.07) 16%,
+    transparent 42%
+  );
+  opacity: var(--glare-opacity, 0);
+  pointer-events: none;
+  transition: opacity 240ms ease-out;
+}
+
+.product-card__halo {
+  background: radial-gradient(ellipse, rgba(255, 238, 204, 0.18), transparent 68%);
+  filter: blur(16px);
+  transform: translateZ(8px);
+}
+
+.product-card__image {
+  transform: translateZ(28px);
+  transition:
+    opacity 450ms ease,
+    filter 300ms ease;
+}
+
+.lunetty-map-marker-shell {
+  border: 0;
+  background: transparent;
+}
+
+.lunetty-map-marker {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #f9f6f0;
+  border-radius: 50% 50% 50% 0;
+  background: #806334;
+  box-shadow: 0 3px 12px rgba(36, 31, 25, 0.35);
+  transform: rotate(-45deg);
+  transition: background-color 160ms ease, scale 160ms ease;
+}
+
+.lunetty-map-marker.is-active {
+  background: #241f19;
+  scale: 1.16;
+}
+
+.leaflet-container {
+  color: #241f19;
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+.leaflet-popup-content-wrapper {
+  border: 1px solid rgba(36, 31, 25, 0.16);
+  border-radius: 14px;
+  background: #f9f6f0;
+  color: #241f19;
+}
+
+.leaflet-popup-tip {
+  background: #f9f6f0;
+}
+
+.leaflet-control-attribution {
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optician-carousel {
+    scroll-behavior: auto;
+  }
+
+  .lunetty-map-marker {
+    transition: none;
+  }
+}
+
+.footer-logo-3d {
+  text-shadow: 1px 1px 0 #c6a674, 2px 2px 0 #806334, 4px 5px 12px rgba(36, 31, 25, 0.22);
+}
+
+::selection {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* Lenis : règles recommandées pour un défilement fluide */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* Accessibilité : focus visible et lien d'évitement */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: -4rem;
+  z-index: 100;
+  background: var(--foreground);
+  color: var(--background);
+  padding: 0.6rem 1rem;
+  transition: top 0.2s var(--ease-lux);
+}
+.skip-link:focus {
+  top: 1rem;
+}
+
+/* Respect de prefers-reduced-motion : on coupe toutes les animations CSS */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+body,
+body :where(*) {
+  font-family: var(--font-inter), Arial, sans-serif !important;
+  font-weight: 700 !important;
+}
+
+body :where(input, textarea, select)::placeholder {
+  font-family: var(--font-inter), Arial, sans-serif !important;
+  font-weight: 700 !important;
+}
+
+.logo-wordmark__link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.logo-wordmark {
+  position: relative;
+  display: inline-block;
+  margin: 0;
+  overflow: visible;
+  font-family: var(--font-logo), Georgia, serif !important;
+  font-style: normal !important;
+  font-weight: 700 !important;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.logo-wordmark--sm {
+  font-size: clamp(22px, 1.8vw, 26px);
+}
+
+.logo-wordmark--md {
+  font-size: clamp(32px, 3vw, 40px);
+}
+
+.logo-wordmark--lg {
+  font-size: clamp(48px, 5.6vw, 72px);
+}
+
+.logo-wordmark--dark {
+  color: #1a1713;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
+
+.logo-wordmark--auto {
+  color: var(--lunetty-logo-color);
+  background: var(--lunetty-logo-background);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: var(--lunetty-logo-fill);
+  -webkit-text-stroke: var(--lunetty-logo-stroke);
+  text-shadow: var(--lunetty-logo-shadow);
+}
+
+.logo-wordmark--gold {
+  color: #c9a45c;
+  background: linear-gradient(180deg, #f1d58a 0%, #c9a45c 55%, #8a6a2f 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 0.65px #2a1f10;
+  text-shadow:
+    0 -0.5px 0 rgba(255, 255, 255, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+@supports not (-webkit-background-clip: text) {
+  .logo-wordmark--gold {
+    color: #c9a45c;
+    background: none;
+    -webkit-text-fill-color: #c9a45c;
+  }
+
+  .logo-wordmark--auto {
+    background: none;
+    -webkit-text-fill-color: var(--lunetty-logo-color);
+  }
+}
+

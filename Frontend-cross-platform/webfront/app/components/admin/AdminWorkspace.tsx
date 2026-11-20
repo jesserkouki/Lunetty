@@ -38,6 +38,7 @@ import {
   type AdminUser,
 } from "@/services/admin.service";
 import { ApiError } from "@/services/api";
+import LogoWordmark from "../ui/LogoWordmark";
 
 type Section =
   | "overview"
@@ -449,10 +450,10 @@ export function AdminWorkspace() {
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
-        <Link className="admin-brand" href="/">
+        <Link className="admin-brand" href="/" aria-label="Lunetty, accueil">
           <span className="admin-brand-mark">L</span>
           <span>
-            <strong>LUNETTY</strong>
+            <LogoWordmark variant="auto" size="sm" as="div" />
             <small>SUPER ADMIN</small>
           </span>
         </Link>

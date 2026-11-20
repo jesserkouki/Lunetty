@@ -1,0 +1,62 @@
+.backdrop {
+  background: rgba(15, 13, 10, 0.72);
+}
+
+.heroImage {
+  z-index: 1;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  transform: translate3d(var(--hero-offset-x, 0px), var(--hero-offset-y, 0px), 0)
+    scale(1);
+  transition: opacity 400ms ease;
+}
+
+.heroImageLoaded {
+  opacity: 1;
+}
+
+.heroImageAnimated {
+  animation: hero-image-zoom 20s ease-in-out infinite alternate;
+}
+
+@keyframes hero-image-zoom {
+  from {
+    transform: translate3d(
+        var(--hero-offset-x, 0px),
+        var(--hero-offset-y, 0px),
+        0
+      )
+      scale(1);
+  }
+
+  to {
+    transform: translate3d(
+        var(--hero-offset-x, 0px),
+        var(--hero-offset-y, 0px),
+        0
+      )
+      scale(1.05);
+  }
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .backdrop {
+    background: rgba(15, 13, 10, 0.48);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop {
+    scroll-behavior: auto;
+  }
+
+  .heroImage,
+  .heroImageAnimated {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+}

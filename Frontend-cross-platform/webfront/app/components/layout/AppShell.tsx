@@ -27,6 +27,8 @@ import {
   IconX,
   IconChevronRight,
 } from "../ui/Icons";
+import { OpticianAssistantPanel } from "./OpticianAssistantPanel";
+import LogoWordmark from "../ui/LogoWordmark";
 
 const opticianNavGroups = [
   {
@@ -67,6 +69,23 @@ const opticianNavGroups = [
       { href: "settings", label: "Configuration", icon: IconSettings },
     ],
   },
+];
+
+const clientNavLinks = [
+  { href: "dashboard", label: "Tableau de bord", icon: IconDashboard },
+  { href: "profile", label: "Profil", icon: IconProfile },
+  { href: "stores", label: "Boutiques", icon: IconStore },
+  { href: "products", label: "Catalogue", icon: IconCatalog },
+  { href: "addresses", label: "Mes adresses", icon: IconLocations },
+  { href: "orders", label: "Mes commandes", icon: IconOrders },
+  { href: "appointments", label: "Mes rendez-vous", icon: IconAppointments },
+  { href: "prescriptions", label: "Mes ordonnances", icon: IconCatalog },
+  { href: "favorites", label: "Mes favoris", icon: IconEyeglasses },
+  { href: "following", label: "Abonnements", icon: IconMembers },
+  { href: "social", label: "Communauté", icon: IconActivity },
+  { href: "notifications", label: "Notifications", icon: IconActivity },
+  { href: "cart", label: "Mon panier", icon: IconInventory },
+  { href: "try-on", label: "Essais virtuels", icon: IconSparkles },
 ];
 
 const MOBILE_SIDEBAR_QUERY = "(max-width: 900px)";
@@ -146,18 +165,34 @@ export function AppShell({
   );
 
   return (
-    <div className={`app-shell opt-shell${isSidebarCollapsed ? " sidebar-collapsed" : " sidebar-expanded"}`}>
+    <div className={`app-shell opt-shell${portal === "optician" ? " optician-portal" : ""}${isSidebarCollapsed ? " sidebar-collapsed" : " sidebar-expanded"}`}>
       {/* Sidebar */}
       <aside className="sidebar opt-sidebar">
         {/* Brand */}
         <div className="opt-sidebar-brand-block">
-          <Link className="opt-brand-wrap" href={`/${portal}/dashboard`}>
+          <Link
+            className="opt-brand-wrap"
+            href={`/${portal}/dashboard`}
+            aria-label={
+              portal === "optician"
+                ? "Lunetty, espace opticien"
+                : portal === "employee"
+                  ? "Lunetty, portail employé"
+                  : "Lunetty, espace client"
+            }
+          >
             <div className="opt-logo-icon">
               <IconEyeglasses height={22} width={22} />
             </div>
             <div>
-              <span className="brand opt-brand-text">Lunetty</span>
-              <span className="opt-brand-eyebrow">{portal === "optician" ? "ATELIER OPTIQUE" : "PORTAIL EMPLOYÉ"}</span>
+              <LogoWordmark variant="auto" size="sm" as="div" />
+              <span className="opt-brand-eyebrow">
+                {portal === "optician"
+                  ? "ATELIER OPTIQUE"
+                  : portal === "client"
+                    ? "ESPACE CLIENT"
+                    : "PORTAIL EMPLOYÉ"}
+              </span>
             </div>
           </Link>
           <button
@@ -242,6 +277,32 @@ export function AppShell({
                 })}
               </div>
             ))
+          ) : portal === "client" ? (
+            <div className="opt-nav-group">
+              <span className="opt-nav-group-title">MON ESPACE</span>
+              {clientNavLinks.map((link) => {
+                const target = `/client/${link.href}`;
+                const isActive =
+                  pathname === target || pathname.startsWith(`${target}/`);
+                const Icon = link.icon;
+                return (
+                  <Link
+                    key={link.href}
+                    className={`opt-nav-link ${isActive ? "active" : ""}`}
+                    href={target}
+                    aria-current={isActive ? "page" : undefined}
+                    aria-label={link.label}
+                    title={link.label}
+                    onClick={() => {
+                      if (isMobile) setSidebarCollapsed(false);
+                    }}
+                  >
+                    <Icon className="opt-nav-icon" height={18} width={18} />
+                    <span className="opt-nav-label">{link.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
           ) : portal === "employee" ? (
             <div className="opt-nav-group">
               <span className="opt-nav-group-title">MON ESPACE</span>
@@ -276,7 +337,11 @@ export function AppShell({
             <div className="opt-user-info">
               <span className="opt-user-name">{user?.prenom} {user?.nom}</span>
               <span className="opt-user-role">
-                {portal === "optician" ? "Opticien / Gérant" : "Employé"}
+                {portal === "optician"
+                  ? "Opticien / Gérant"
+                  : portal === "client"
+                    ? "Client"
+                    : "Employé"}
               </span>
             </div>
           </div>
@@ -285,6 +350,11 @@ export function AppShell({
             {portal === "optician" && (
               <Link className="button secondary full-width" href="/">
                 Espace client
+              </Link>
+            )}
+            {portal === "client" && (
+              <Link className="button secondary full-width" href="/">
+                Retour au site
               </Link>
             )}
             <button
@@ -332,49 +402,13 @@ export function AppShell({
       </main>
       {portal === "optician" && (
         <aside className="chatbot-placeholder" aria-label="Assistant boutique">
-          <section
-            className={`chatbot-panel opt-chatbot-card${chatbotOpen ? " chatbot-panel-open" : ""}`}
-            aria-label="Conversation avec l’assistant Lunetty"
-            aria-hidden={!chatbotOpen}
-            inert={!chatbotOpen}
-            role="dialog"
-          >
-            <div className="opt-chatbot-head">
-              <div className="opt-icon-bubble gold">
-                <IconSparkles height={18} width={18} />
-              </div>
-              <div className="opt-chatbot-title">
-                <h3>Assistant Opticien Lunetty</h3>
-                <p className="opt-chatbot-sub">Votre assistant boutique</p>
-              </div>
-              <button
-                className="opt-chatbot-close"
-                onClick={() => setChatbotOpen(false)}
-                type="button"
-                aria-label="Fermer l’assistant"
-                tabIndex={chatbotOpen ? 0 : -1}
-              >
-                <IconX height={18} width={18} />
-              </button>
-            </div>
-            <div className="opt-chatbot-body">
-              <span className="opt-chatbot-coming-soon">Bientôt disponible</span>
-              <p className="opt-chatbot-message">
-                L’assistant boutique arrive prochainement. La conversation n’est pas encore activée.
-              </p>
-            </div>
-            <div className="opt-chatbot-composer">
-              <input
-                aria-label="Message"
-                disabled
-                placeholder="Conversation bientôt disponible"
-                tabIndex={chatbotOpen ? 0 : -1}
-              />
-              <button type="button" disabled aria-label="Envoyer le message">
-                <IconSparkles height={16} width={16} />
-              </button>
-            </div>
-          </section>
+          <OpticianAssistantPanel
+            key={storeId || "no-store"}
+            open={chatbotOpen}
+            storeId={storeId}
+            storeName={activeStore?.store.nom ?? "Boutique"}
+            onClose={() => setChatbotOpen(false)}
+          />
           <button
             className="chatbot-trigger opt-chatbot-btn"
             onClick={() => setChatbotOpen((open) => !open)}

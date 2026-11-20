@@ -3,8 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Camera, Check, Download, FileText, LockKeyhole, Moon,
-  Sun, Trash2, Upload, UserRound, X,
+  ArrowLeft, CalendarDays, Camera, Check, ChevronLeft, ChevronRight, Download, Eye,
+  EyeOff, FileText, LockKeyhole, Monitor, Moon, Sun, Trash2, Upload, UserRound, X,
 } from "lucide-react";
 import { useUser, useAuth as useClerkAuth } from "@clerk/nextjs";
 import { useAuth } from "@/lib/auth-context";
@@ -27,6 +27,14 @@ type ProfileForm = {
   };
 };
 type NotificationPreferences = Record<string, boolean>;
+
+const SETTINGS_SECTIONS = [
+  { id: "profil", label: "Profil", icon: UserRound },
+  { id: "ordonnance", label: "Ordonnance", icon: FileText },
+  { id: "security", label: "Sécurité", icon: LockKeyhole },
+  { id: "preferences", label: "Préférences", icon: Sun },
+  { id: "danger-zone", label: "Zone de danger", icon: Trash2 },
+] as const;
 
 const PRESCRIPTION_TYPES = ["image/jpeg", "image/png", "application/pdf"];
 const MAX_PRESCRIPTION_BYTES = 10 * 1024 * 1024;
@@ -96,8 +104,8 @@ export default function AccountSettingsPage() {
   const { user, status, signOut, updateUserProfile } = useAuth();
   const { user: clerkUser } = useUser();
   const { getToken } = useClerkAuth();
-  const { themeMode, setThemeMode } = useTheme();
-  const dark = themeMode === "dark";
+  const { themeMode, resolvedTheme, setThemeMode } = useTheme();
+  const dark = resolvedTheme === "dark";
   const avatarInput = useRef<HTMLInputElement | null>(null);
   const prescriptionsInput = useRef<HTMLInputElement | null>(null);
   const [profile, setProfile] = useState<ClientProfile | null>(null);
@@ -110,9 +118,17 @@ export default function AccountSettingsPage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarZoom, setAvatarZoom] = useState(1);
   const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
+  const [passwordVisibility, setPasswordVisibility] = useState({
+    current: false,
+    next: false,
+    confirm: false,
+  });
   const [newEmail, setNewEmail] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>("profil");
+  const [addressTouched, setAddressTouched] = useState(false);
+  const [profileAttempted, setProfileAttempted] = useState(false);
   const [prescriptionForm, setPrescriptionForm] = useState({
     title: "",
     examDate: "",
@@ -127,14 +143,10 @@ export default function AccountSettingsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [emailLinkSent, setEmailLinkSent] = useState(false);
 
-  const panel = `rounded-3xl border p-6 sm:p-8 shadow-xl ${
-    dark ? "border-white/10 bg-[#171514]/90" : "border-stone-200 bg-white"
-  }`;
-  const heading = dark ? "text-white" : "text-stone-900";
-  const muted = dark ? "text-stone-400" : "text-stone-600";
-  const inputStyle = `w-full rounded-xl border px-3.5 py-3 text-sm outline-none transition-colors focus:border-amber-500 ${
-    dark ? "border-white/10 bg-[#100f0e] text-stone-100" : "border-stone-300 bg-white text-stone-900"
-  }`;
+  const panel = "settings-card w-full rounded-[1.5rem] border border-lunetty-line bg-lunetty-surface p-5 shadow-[0_16px_44px_rgba(26,23,19,0.06)] sm:p-8";
+  const heading = "text-lunetty-ink";
+  const muted = "text-lunetty-muted";
+  const inputStyle = "min-h-12 w-full rounded-xl border border-lunetty-line bg-lunetty-surface px-4 py-3 text-sm text-lunetty-ink outline-none transition focus:border-lunetty-gold focus:ring-2 focus:ring-lunetty-gold/20";
   const dirty = Boolean(form && initialForm && JSON.stringify(form) !== JSON.stringify(initialForm));
 
   const loadSettings = useCallback(async () => {
@@ -222,6 +234,31 @@ export default function AccountSettingsPage() {
   }, [toast]);
 
   useEffect(() => {
+    if (loading) return;
+    const sections = SETTINGS_SECTIONS.map(({ id }) =>
+      document.getElementById(id),
+    ).filter((section): section is HTMLElement => section !== null);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort(
+            (left, right) =>
+              left.boundingClientRect.top - right.boundingClientRect.top,
+          )[0];
+        if (visible) setActiveSection(visible.target.id);
+      },
+      { rootMargin: "-18% 0px -68% 0px", threshold: 0 },
+    );
+    sections.forEach((section) => observer.observe(section));
+    const targetId = window.location.hash.slice(1);
+    if (targetId) {
+      window.requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView());
+    }
+    return () => observer.disconnect();
+  }, [loading]);
+
+  useEffect(() => {
     const pending = window.sessionStorage.getItem(PENDING_EMAIL_KEY);
     const verifiedAddress = clerkUser?.emailAddresses.find(
       (address) =>
@@ -270,6 +307,7 @@ export default function AccountSettingsPage() {
 
   const saveProfile = async (event: React.FormEvent) => {
     event.preventDefault();
+    setProfileAttempted(true);
     if (!form || !dirty || !profileValid) return;
     setSaving(true);
     setError(null);
@@ -295,6 +333,8 @@ export default function AccountSettingsPage() {
       setProfile(updated);
       setForm(nextForm);
       setInitialForm(nextForm);
+      setAddressTouched(false);
+      setProfileAttempted(false);
       updateUserProfile({
         prenom: updated.prenom,
         nom: updated.nom,
@@ -568,38 +608,97 @@ export default function AccountSettingsPage() {
     };
   }, [passwordForm.next]);
 
+  const passwordRules = [
+    { label: "12 caractères minimum", valid: passwordForm.next.length >= 12 },
+    { label: "Une majuscule et une minuscule", valid: /[a-z]/.test(passwordForm.next) && /[A-Z]/.test(passwordForm.next) },
+    { label: "Un chiffre", valid: /\d/.test(passwordForm.next) },
+    { label: "Un caractère spécial", valid: /[^A-Za-z0-9]/.test(passwordForm.next) },
+  ];
+
   const goBack = () => {
     if (dirty && !window.confirm("Vous avez des modifications non enregistrées. Quitter cette page ?")) return;
-    router.push("/");
+    router.push("/client/dashboard");
   };
 
   if (status === "loading" || loading) {
-    return <main className="min-h-screen flex items-center justify-center bg-[#FBFAF7] text-stone-600">Chargement des paramètres…</main>;
+    return (
+      <main className={`account-settings ${dark ? "dark" : ""} min-h-screen bg-lunetty-cream px-4 py-10 sm:px-8`}>
+        <div className="mx-auto max-w-7xl animate-pulse space-y-5">
+          <div className="h-8 w-64 rounded-xl bg-lunetty-line" />
+          <div className="h-20 rounded-2xl bg-lunetty-surface" />
+          <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)]">
+            <div className="h-64 rounded-2xl bg-lunetty-surface" />
+            <div className="h-[32rem] rounded-2xl bg-lunetty-surface" />
+          </div>
+        </div>
+      </main>
+    );
   }
   if (!user || !profile || !form) return null;
 
   return (
-    <main className={`min-h-screen px-4 py-10 sm:px-8 ${dark ? "bg-[#100f0e] text-stone-100" : "bg-[#FBFAF7] text-stone-900"}`}>
-      <div className="mx-auto max-w-4xl space-y-6">
-        <button type="button" onClick={goBack} className={`inline-flex items-center gap-2 text-sm font-semibold ${muted} hover:text-amber-600`}>
-          <ArrowLeft className="h-4 w-4" /> Retour à l’espace client
+    <main className={`account-settings ${dark ? "dark" : ""} min-h-screen bg-lunetty-cream px-4 pb-28 pt-28 sm:px-8`}>
+      <div className="mx-auto max-w-[1440px] space-y-7">
+        <button type="button" onClick={goBack} className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-lunetty-muted transition hover:text-lunetty-gold-strong">
+          <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Retour à l’espace client
         </button>
-        <header>
-          <span className="text-[11px] font-bold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-200">Espace Client</span>
-          <h1 className={`mt-1 text-3xl font-light font-display ${heading}`}>Paramètres</h1>
-          <p className={`mt-2 text-sm ${muted}`}>Gérez vos informations personnelles et vos préférences.</p>
+        <header className="border-b border-lunetty-line pb-6">
+          <span className="text-xs font-semibold uppercase tracking-[0.28em] text-lunetty-gold-strong">Espace client</span>
+          <h1 className="mt-2 font-serif text-4xl font-medium tracking-tight text-lunetty-ink sm:text-5xl">Paramètres</h1>
+          <p className="mt-2 max-w-2xl text-base leading-7 text-lunetty-muted">Gérez vos informations personnelles et vos préférences en toute simplicité.</p>
         </header>
 
-        {error && <div role="alert" className={`rounded-2xl border px-4 py-3 text-sm ${dark ? "border-rose-400/30 bg-rose-500/10 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-800"}`}>{error}</div>}
+        {error && <div role="alert" className="rounded-2xl border border-lunetty-danger/25 bg-lunetty-danger/5 px-4 py-3 text-sm text-lunetty-danger">{error}</div>}
 
-        <section id="profil" className={panel}>
+        <div className="grid items-start gap-8 lg:grid-cols-[230px_minmax(0,1fr)]">
+          <nav aria-label="Sections des paramètres" className="sticky top-24 hidden self-start rounded-[1.5rem] border border-lunetty-line bg-lunetty-surface p-3 shadow-sm lg:block">
+            <p className="px-3 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-lunetty-muted">Mon compte</p>
+            <ul className="space-y-1">
+              {SETTINGS_SECTIONS.map(({ id, label, icon: Icon }) => (
+                <li key={id}>
+                  <a
+                    href={`#${id}`}
+                    aria-current={activeSection === id ? "location" : undefined}
+                    className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition ${
+                      activeSection === id
+                        ? "bg-lunetty-gold/15 text-lunetty-gold-strong"
+                        : "text-lunetty-muted hover:bg-lunetty-cream hover:text-lunetty-ink"
+                    }`}
+                  >
+                    <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+                    {label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <div className="min-w-0 space-y-6">
+            <nav aria-label="Navigation des paramètres" className="sticky top-20 z-30 -mx-4 flex gap-2 overflow-x-auto border-y border-lunetty-line bg-lunetty-cream/95 px-4 py-3 backdrop-blur lg:hidden">
+              {SETTINGS_SECTIONS.map(({ id, label }) => (
+                <a
+                  key={id}
+                  href={`#${id}`}
+                  aria-current={activeSection === id ? "location" : undefined}
+                  className={`inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm font-semibold transition ${
+                    activeSection === id
+                      ? "border-lunetty-ink bg-lunetty-ink text-lunetty-cream"
+                      : "border-lunetty-line bg-lunetty-surface text-lunetty-muted"
+                  }`}
+                >
+                  {label}
+                </a>
+              ))}
+            </nav>
+
+        <section id="profil" className={`${panel} scroll-mt-28`}>
           <div className="flex items-start gap-3 mb-6">
-            <UserRound className="mt-1 h-5 w-5 text-amber-500" />
-            <div><h2 className={`text-lg font-bold ${heading}`}>Profil</h2><p className={`mt-1 text-xs ${muted}`}>Vos informations sont utilisées pour vos réservations.</p></div>
+            <UserRound aria-hidden="true" className="mt-1 h-5 w-5 text-lunetty-gold-strong" />
+            <div><h2 className={`font-serif text-2xl ${heading}`}>Profil</h2><p className={`mt-1 text-sm ${muted}`}>Vos informations sont utilisées pour vos réservations.</p></div>
           </div>
 
           <div id="avatar" className="flex flex-col sm:flex-row sm:items-center gap-5 mb-8">
-            <div className={`relative h-24 w-24 overflow-hidden rounded-full border-2 border-amber-400 bg-stone-200 ${dark ? "bg-stone-800" : ""}`}>
+            <div className="relative h-24 w-24 overflow-hidden rounded-full border-2 border-lunetty-gold bg-lunetty-cream">
               {(avatarPreview || profile.url_image_profil) ? (
                 <img
                   src={avatarPreview ?? profile.url_image_profil ?? ""}
@@ -608,32 +707,33 @@ export default function AccountSettingsPage() {
                   style={{ transform: `scale(${avatarPreview ? avatarZoom : 1})` }}
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-amber-600">
+                <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-lunetty-gold-strong">
                   {normalizeName(form.prenom).charAt(0).toUpperCase() || "?"}
                 </div>
               )}
-              <span className="absolute bottom-1 right-1 rounded-full bg-amber-500 p-1.5 text-white"><Camera className="h-3.5 w-3.5" /></span>
+              <span aria-hidden="true" className="absolute bottom-1 right-1 grid h-8 w-8 place-items-center rounded-full bg-lunetty-gold text-lunetty-ink shadow"><Camera className="h-4 w-4" /></span>
             </div>
             <div className="flex-1 space-y-2">
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => avatarInput.current?.click()} className="rounded-xl border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-700 dark:text-amber-200">
+                <button type="button" onClick={() => avatarInput.current?.click()} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-lunetty-gold/50 px-4 text-sm font-semibold text-lunetty-gold-strong transition hover:bg-lunetty-gold/10">
+                  <Camera aria-hidden="true" className="h-4 w-4" />
                   Choisir une photo
                 </button>
-                {(profile.url_image_profil || avatarPreview) && <button type="button" disabled={saving} onClick={() => void removeAvatar()} className="rounded-xl border border-rose-500/25 px-3 py-2 text-xs font-semibold text-rose-600">Supprimer la photo</button>}
-                {avatarFile && <button type="button" disabled={saving} onClick={() => void saveAvatar()} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? "Envoi…" : "Enregistrer la photo"}</button>}
+                {(profile.url_image_profil || avatarPreview) && <button type="button" disabled={saving} onClick={() => void removeAvatar()} className="inline-flex min-h-11 items-center rounded-full border border-lunetty-danger/30 px-4 text-sm font-semibold text-lunetty-danger">Supprimer la photo</button>}
+                {avatarFile && <button type="button" disabled={saving} onClick={() => void saveAvatar()} className="inline-flex min-h-11 items-center rounded-full bg-lunetty-ink px-4 text-sm font-semibold text-lunetty-cream disabled:opacity-50">{saving ? "Envoi…" : "Enregistrer la photo"}</button>}
               </div>
               {avatarPreview && (
-                <label className={`block max-w-sm text-xs ${muted}`}>
+                <label className={`block max-w-sm text-sm ${muted}`}>
                   Recadrer la photo
-                  <input aria-label="Zoom de recadrage" type="range" min="1" max="2.5" step="0.05" value={avatarZoom} onChange={(event) => setAvatarZoom(Number(event.target.value))} className="mt-2 block w-full accent-amber-500" />
+                  <input aria-label="Zoom de recadrage" type="range" min="1" max="2.5" step="0.05" value={avatarZoom} onChange={(event) => setAvatarZoom(Number(event.target.value))} className="mt-2 block w-full accent-[var(--lunetty-gold)]" />
                 </label>
               )}
-              <p className={`text-xs ${muted}`}>JPG, PNG ou WebP · 5 Mo maximum. La photo est recadrée au carré et optimisée avant l’envoi.</p>
+              <p className={`text-sm ${muted}`}>JPG, PNG ou WebP · 5 Mo maximum. La photo est recadrée au carré et optimisée avant l’envoi.</p>
               <input ref={avatarInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => void chooseAvatar(event.target.files?.[0])} />
             </div>
           </div>
 
-          <form onSubmit={saveProfile} className="space-y-5">
+          <form id="profile-form" onSubmit={saveProfile} className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Prénom" value={form.prenom} error={profileErrors.prenom} inputStyle={inputStyle} onChange={(value) => setForm((current) => current ? { ...current, prenom: value } : current)} />
               <Field label="Nom" value={form.nom} error={profileErrors.nom} inputStyle={inputStyle} onChange={(value) => setForm((current) => current ? { ...current, nom: value } : current)} />
@@ -643,28 +743,31 @@ export default function AccountSettingsPage() {
               <Field label="Téléphone" value={form.telephone} error={profileErrors.telephone} inputStyle={inputStyle} placeholder="+216 12 345 678" onChange={(value) => setForm((current) => current ? { ...current, telephone: value } : current)} />
             </div>
             <div id="adresse" className="space-y-4">
-              <h3 className={`text-sm font-bold ${heading}`}>Adresse</h3>
+              <h3 className={`text-base font-semibold ${heading}`}>Adresse</h3>
+              {profileErrors.adresse && (addressTouched || profileAttempted) && (
+                <p role="alert" className="text-sm text-lunetty-danger">{profileErrors.adresse}</p>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Rue et numéro" value={form.adresse.ligne_1} error={profileErrors.adresse} inputStyle={inputStyle} onChange={(value) => setForm((current) => current ? { ...current, adresse: { ...current.adresse, ligne_1: value } } : current)} />
-                <Field label="Ville" value={form.adresse.ville} inputStyle={inputStyle} onChange={(value) => setForm((current) => current ? { ...current, adresse: { ...current.adresse, ville: value } } : current)} />
-                <Field label="Code postal" value={form.adresse.code_postal} inputStyle={inputStyle} onChange={(value) => setForm((current) => current ? { ...current, adresse: { ...current.adresse, code_postal: value } } : current)} />
-                <Field label="Pays (code ISO)" value={form.adresse.code_pays} inputStyle={inputStyle} onChange={(value) => setForm((current) => current ? { ...current, adresse: { ...current.adresse, code_pays: value } } : current)} />
+                <Field label="Rue et numéro" value={form.adresse.ligne_1} inputStyle={inputStyle} onChange={(value) => { setAddressTouched(true); setForm((current) => current ? { ...current, adresse: { ...current.adresse, ligne_1: value } } : current); }} />
+                <Field label="Ville" value={form.adresse.ville} inputStyle={inputStyle} onChange={(value) => { setAddressTouched(true); setForm((current) => current ? { ...current, adresse: { ...current.adresse, ville: value } } : current); }} />
+                <Field label="Code postal" value={form.adresse.code_postal} inputStyle={inputStyle} onChange={(value) => { setAddressTouched(true); setForm((current) => current ? { ...current, adresse: { ...current.adresse, code_postal: value } } : current); }} />
+                <Field label="Pays (code ISO)" value={form.adresse.code_pays} inputStyle={inputStyle} onChange={(value) => { setAddressTouched(true); setForm((current) => current ? { ...current, adresse: { ...current.adresse, code_pays: value } } : current); }} />
               </div>
             </div>
-            <div className="flex justify-end border-t border-stone-200/60 pt-4 dark:border-white/10">
-              <button disabled={!dirty || !profileValid || saving} className="rounded-xl bg-stone-900 px-5 py-3 text-xs font-bold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-stone-100 dark:text-stone-950 dark:hover:bg-amber-100">
+            <div className="flex justify-end border-t border-lunetty-line pt-4">
+              <button disabled={!dirty || saving} className="inline-flex min-h-11 items-center rounded-full bg-lunetty-ink px-6 text-sm font-semibold text-lunetty-cream transition hover:bg-lunetty-gold-strong disabled:cursor-not-allowed disabled:opacity-40">
                 {saving ? "Enregistrement…" : "Enregistrer les modifications"}
               </button>
             </div>
           </form>
         </section>
 
-        <section id="ordonnance" className={panel}>
+        <section id="ordonnance" className={`${panel} scroll-mt-28`}>
           <div className="flex items-start gap-3">
-            <FileText className="mt-1 h-5 w-5 text-amber-500" />
+            <FileText aria-hidden="true" className="mt-1 h-5 w-5 text-lunetty-gold-strong" />
             <div>
-              <h2 className={`text-lg font-bold ${heading}`}>Mon ordonnance</h2>
-              <p className={`mt-1 text-xs ${muted}`}>Visible uniquement par vous et l’opticien que vous choisissez.</p>
+              <h2 className={`font-serif text-2xl ${heading}`}>Mon ordonnance</h2>
+              <p className={`mt-1 text-sm ${muted}`}>Visible uniquement par vous et l’opticien que vous choisissez.</p>
             </div>
           </div>
           <div className="mt-5 space-y-3">
@@ -672,130 +775,185 @@ export default function AccountSettingsPage() {
               const warning = prescriptionWarning(prescription);
               const fileUrl = fileUrls[prescription.id];
               return (
-                <article key={prescription.id} className={`rounded-2xl border p-4 ${dark ? "border-white/10 bg-[#100f0e]" : "border-stone-200 bg-stone-50"}`}>
+                <article key={prescription.id} className="rounded-2xl border border-lunetty-line bg-lunetty-cream p-4">
                   <div className="flex flex-col sm:flex-row gap-4">
-                    <div className={`h-20 w-20 shrink-0 overflow-hidden rounded-xl border flex items-center justify-center ${dark ? "border-white/10 bg-black/20" : "border-stone-200 bg-white"}`}>
-                      {fileUrl && prescription.type_fichier?.startsWith("image/") ? <img src={fileUrl} alt="Aperçu de l’ordonnance" className="h-full w-full object-cover" /> : <FileText className="h-8 w-8 text-amber-500" />}
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-lunetty-line bg-lunetty-surface">
+                      {fileUrl && prescription.type_fichier?.startsWith("image/") ? <img src={fileUrl} alt="Aperçu de l’ordonnance" className="h-full w-full object-cover" /> : <FileText aria-hidden="true" className="h-8 w-8 text-lunetty-gold-strong" />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className={`font-bold ${heading}`}>{prescription.titre || prescription.nom_fichier || "Ordonnance"}</h3>
                         {prescription.est_active && <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-300">Active</span>}
-                        {warning && <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${warning === "Expirée" ? "bg-rose-500/10 text-rose-600 dark:text-rose-300" : "bg-amber-500/10 text-amber-700 dark:text-amber-200"}`}>{warning}</span>}
+                        {warning && <span className={`rounded-full px-3 py-1 text-sm font-semibold ${warning === "Expirée" ? "bg-lunetty-danger/10 text-lunetty-danger" : "bg-lunetty-gold/15 text-lunetty-gold-strong"}`}>{warning}</span>}
                       </div>
                       <p className={`mt-1 text-xs ${muted}`}>Examen : {prescription.prescrit_le ? new Date(prescription.prescrit_le).toLocaleDateString("fr-FR") : "Date non renseignée"}{prescription.expire_le ? ` · Expire le ${new Date(prescription.expire_le).toLocaleDateString("fr-FR")}` : ""}</p>
                       {prescription.notes && <p className={`mt-2 text-xs ${muted}`}>{prescription.notes}</p>}
                       <p className={`mt-1 text-[11px] ${muted}`}>{prescription.nom_fichier ?? "Document sans fichier"}</p>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {fileUrl && <button type="button" onClick={() => window.open(fileUrl, "_blank", "noopener,noreferrer")} className="rounded-lg border border-amber-500/30 px-3 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-200">Voir</button>}
-                        <label className="cursor-pointer rounded-lg border border-stone-300 px-3 py-2 text-[11px] font-semibold text-stone-700 dark:border-white/10 dark:text-stone-300">
+                        {fileUrl && <button type="button" onClick={() => window.open(fileUrl, "_blank", "noopener,noreferrer")} className="inline-flex min-h-11 items-center rounded-full border border-lunetty-gold/50 px-4 text-sm font-semibold text-lunetty-gold-strong">Voir</button>}
+                        <label className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-lunetty-line px-4 text-sm font-semibold text-lunetty-ink">
                           Remplacer
                           <input type="file" accept="image/jpeg,image/png,application/pdf" className="sr-only" onChange={(event) => void replacePrescription(prescription.id, event.target.files?.[0])} />
                         </label>
-                        {!prescription.est_active && <button type="button" disabled={prescriptionSaving} onClick={() => void setPrescriptionActive(prescription)} className="rounded-lg border border-emerald-500/30 px-3 py-2 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Définir comme active</button>}
-                        <button type="button" disabled={prescriptionSaving} onClick={() => void removePrescription(prescription)} className="rounded-lg border border-rose-500/25 px-3 py-2 text-[11px] font-semibold text-rose-600">Supprimer</button>
+                        {!prescription.est_active && <button type="button" disabled={prescriptionSaving} onClick={() => void setPrescriptionActive(prescription)} className="inline-flex min-h-11 items-center rounded-full border border-emerald-600/30 px-4 text-sm font-semibold text-emerald-800 dark:text-emerald-300">Définir comme active</button>}
+                        <button type="button" disabled={prescriptionSaving} onClick={() => void removePrescription(prescription)} className="inline-flex min-h-11 items-center rounded-full border border-lunetty-danger/30 px-4 text-sm font-semibold text-lunetty-danger">Supprimer</button>
                       </div>
                     </div>
                   </div>
                 </article>
               );
             })}
-            {!prescriptions.length && <p className={`rounded-2xl border border-dashed p-6 text-center text-sm ${muted}`}>Aucune ordonnance enregistrée.</p>}
+            {!prescriptions.length && <p className={`rounded-2xl border border-dashed border-lunetty-line bg-lunetty-cream p-6 text-center text-sm ${muted}`}>Aucune ordonnance enregistrée.</p>}
           </div>
-          <div className={`mt-5 rounded-2xl border p-4 ${dark ? "border-white/10 bg-white/[0.03]" : "border-stone-200 bg-stone-50"}`}>
-            <h3 className={`text-sm font-bold ${heading}`}>Ajouter une ordonnance</h3>
+          <div className="mt-5 rounded-2xl border border-lunetty-line bg-lunetty-cream p-4 sm:p-5">
+            <h3 className={`text-lg font-semibold ${heading}`}>Ajouter une ordonnance</h3>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <Field label="Nom (facultatif)" value={prescriptionForm.title} inputStyle={inputStyle} onChange={(value) => setPrescriptionForm((current) => ({ ...current, title: value }))} />
-              <label className={`block text-xs font-semibold ${muted}`}>Date de l’examen
-                <input type="date" value={prescriptionForm.examDate} onChange={(event) => setPrescriptionForm((current) => ({ ...current, examDate: event.target.value }))} className={`${inputStyle} mt-1.5`} />
-              </label>
-              <label className={`block text-xs font-semibold ${muted}`}>Date d’expiration (facultative)
-                <input type="date" min={prescriptionForm.examDate || undefined} value={prescriptionForm.expiryDate} onChange={(event) => setPrescriptionForm((current) => ({ ...current, expiryDate: event.target.value }))} className={`${inputStyle} mt-1.5`} />
-              </label>
+              <DatePicker
+                label="Date de l’examen"
+                value={prescriptionForm.examDate}
+                onChange={(examDate) => setPrescriptionForm((current) => ({
+                  ...current,
+                  examDate,
+                  expiryDate: current.expiryDate && current.expiryDate < examDate ? "" : current.expiryDate,
+                }))}
+              />
+              <DatePicker
+                label="Date d’expiration (facultative)"
+                value={prescriptionForm.expiryDate}
+                min={prescriptionForm.examDate || undefined}
+                onChange={(expiryDate) => setPrescriptionForm((current) => ({ ...current, expiryDate }))}
+              />
               <label className={`block text-xs font-semibold ${muted}`}>Note (facultative)
                 <input value={prescriptionForm.note} onChange={(event) => setPrescriptionForm((current) => ({ ...current, note: event.target.value }))} className={`${inputStyle} mt-1.5`} maxLength={1000} />
               </label>
             </div>
-            <label className={`mt-4 flex items-center gap-2 text-xs ${muted}`}>
-              <input type="checkbox" checked={prescriptionForm.active || prescriptions.length === 0} onChange={(event) => setPrescriptionForm((current) => ({ ...current, active: event.target.checked }))} className="accent-amber-500" />
-              Marquer comme ordonnance active
-            </label>
+            <button
+              type="button"
+              onClick={() => prescriptionsInput.current?.click()}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                void uploadPrescriptions(event.dataTransfer.files);
+              }}
+              className="mt-5 flex min-h-28 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-lunetty-gold/60 bg-lunetty-surface px-5 py-5 text-center transition hover:bg-lunetty-gold/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lunetty-gold-strong"
+            >
+              <Upload aria-hidden="true" className="h-6 w-6 text-lunetty-gold-strong" />
+              <p className={`mt-2 text-sm font-semibold ${heading}`}>Déposez votre ordonnance ici</p>
+              <p className={`mt-1 text-sm ${muted}`}>JPG, PNG ou PDF · 10 Mo maximum</p>
+            </button>
+            <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-lunetty-line bg-lunetty-surface px-4 py-3">
+              <span className={`text-sm font-medium ${heading}`}>Marquer comme ordonnance active</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={prescriptionForm.active}
+                aria-label="Marquer comme ordonnance active"
+                onClick={() => setPrescriptionForm((current) => ({ ...current, active: !current.active }))}
+                className="relative h-11 w-14 shrink-0 rounded-full"
+              >
+                <span aria-hidden="true" className={`absolute inset-x-1 top-2 h-7 rounded-full transition-colors ${prescriptionForm.active ? "bg-lunetty-gold" : "bg-stone-300 dark:bg-stone-600"}`} />
+                <span aria-hidden="true" className={`absolute left-1 top-3 h-5 w-5 rounded-full bg-white shadow transition-transform ${prescriptionForm.active ? "translate-x-7" : ""}`} />
+              </button>
+            </div>
+            <p className={`mt-3 flex items-center gap-2 text-sm ${muted}`}>
+              <LockKeyhole aria-hidden="true" className="h-4 w-4 shrink-0 text-lunetty-gold-strong" />
+              Votre document reste privé et n’est partagé qu’avec l’opticien choisi.
+            </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <input ref={prescriptionsInput} type="file" multiple accept="image/jpeg,image/png,application/pdf" onChange={(event) => void uploadPrescriptions(event.target.files)} className="sr-only" id="prescription-files" />
-              <button type="button" disabled={prescriptionSaving} onClick={() => prescriptionsInput.current?.click()} className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-xs font-bold text-white disabled:opacity-50">
-                <Upload className="h-4 w-4" /> {prescriptionSaving ? "Envoi…" : "Choisir un fichier"}
+              <button type="button" disabled={prescriptionSaving} onClick={() => prescriptionsInput.current?.click()} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-lunetty-ink px-5 text-sm font-semibold text-lunetty-cream disabled:opacity-50">
+                <Upload aria-hidden="true" className="h-4 w-4" /> {prescriptionSaving ? "Envoi…" : "Choisir un fichier"}
               </button>
-              <span className={`text-xs ${muted}`}>JPG, PNG ou PDF · 10 Mo maximum · plusieurs fichiers autorisés</span>
+              <span className={`text-sm ${muted}`}>Plusieurs fichiers autorisés</span>
             </div>
           </div>
         </section>
 
-        <section id="security" className={panel}>
-          <div className="flex items-start gap-3 mb-6"><LockKeyhole className="mt-1 h-5 w-5 text-amber-500" /><div><h2 className={`text-lg font-bold ${heading}`}>Sécurité</h2><p className={`mt-1 text-xs ${muted}`}>Protégez l’accès à votre compte.</p></div></div>
+        <section id="security" className={`${panel} scroll-mt-28`}>
+          <div className="mb-6 flex items-start gap-3"><LockKeyhole aria-hidden="true" className="mt-1 h-5 w-5 text-lunetty-gold-strong" /><div><h2 className={`font-serif text-2xl ${heading}`}>Sécurité</h2><p className={`mt-1 text-sm ${muted}`}>Protégez l’accès à votre compte.</p></div></div>
           <form onSubmit={changePassword} className="space-y-4">
-            <h3 className={`text-sm font-bold ${heading}`}>Changer le mot de passe</h3>
+            <h3 className={`text-base font-semibold ${heading}`}>Changer le mot de passe</h3>
             <div className="grid gap-4 sm:grid-cols-3">
-              <PasswordField label="Mot de passe actuel" value={passwordForm.current} disabled={Boolean(clerkUser)} inputStyle={inputStyle} onChange={(value) => setPasswordForm((current) => ({ ...current, current: value }))} />
-              <PasswordField label="Nouveau mot de passe" value={passwordForm.next} inputStyle={inputStyle} onChange={(value) => setPasswordForm((current) => ({ ...current, next: value }))} />
-              <PasswordField label="Confirmer le mot de passe" value={passwordForm.confirm} inputStyle={inputStyle} onChange={(value) => setPasswordForm((current) => ({ ...current, confirm: value }))} />
+              <PasswordField label="Mot de passe actuel" value={passwordForm.current} visible={passwordVisibility.current} autoComplete="current-password" disabled={Boolean(clerkUser)} inputStyle={inputStyle} onToggle={() => setPasswordVisibility((current) => ({ ...current, current: !current.current }))} onChange={(value) => setPasswordForm((current) => ({ ...current, current: value }))} />
+              <PasswordField label="Nouveau mot de passe" value={passwordForm.next} visible={passwordVisibility.next} autoComplete="new-password" inputStyle={inputStyle} onToggle={() => setPasswordVisibility((current) => ({ ...current, next: !current.next }))} onChange={(value) => setPasswordForm((current) => ({ ...current, next: value }))} />
+              <PasswordField label="Confirmer le mot de passe" value={passwordForm.confirm} visible={passwordVisibility.confirm} autoComplete="new-password" inputStyle={inputStyle} onToggle={() => setPasswordVisibility((current) => ({ ...current, confirm: !current.confirm }))} onChange={(value) => setPasswordForm((current) => ({ ...current, confirm: value }))} />
             </div>
             <div aria-live="polite">
-              <div className="flex gap-1">{[1, 2, 3, 4].map((step) => <span key={step} className={`h-1.5 flex-1 rounded-full ${passwordStrength.score >= step ? "bg-amber-500" : dark ? "bg-white/10" : "bg-stone-200"}`} />)}</div>
-              <p className={`mt-1 text-[11px] ${muted}`}>{passwordStrength.label} · 12 caractères minimum</p>
+              <div className="flex gap-2">{[1, 2, 3, 4].map((step) => <span key={step} className={`h-2 flex-1 rounded-full transition-colors ${passwordStrength.score >= step ? "bg-lunetty-gold" : "bg-lunetty-line"}`} />)}</div>
+              <p className={`mt-2 text-sm font-semibold ${passwordStrength.score >= 3 ? "text-lunetty-gold-strong" : muted}`}>{passwordStrength.label}</p>
             </div>
-            {passwordForm.next && passwordForm.next !== passwordForm.confirm && <p className="text-xs text-rose-500">Les mots de passe ne correspondent pas.</p>}
-            <button disabled={saving || passwordForm.next.length < 12 || passwordForm.next !== passwordForm.confirm || (!clerkUser && !passwordForm.current)} className="rounded-xl border border-stone-300 px-4 py-2.5 text-xs font-bold disabled:opacity-40 dark:border-white/10">Modifier le mot de passe</button>
+            <ul className="grid gap-2 text-sm sm:grid-cols-2">
+              {passwordRules.map((rule) => (
+                <li key={rule.label} className={`flex items-center gap-2 ${rule.valid ? "text-emerald-800 dark:text-emerald-300" : muted}`}>
+                  <Check aria-hidden="true" className={`h-4 w-4 ${rule.valid ? "" : "opacity-30"}`} /> {rule.label}
+                </li>
+              ))}
+            </ul>
+            {passwordForm.next && passwordForm.next !== passwordForm.confirm && <p className="text-sm text-lunetty-danger">Les mots de passe ne correspondent pas.</p>}
+            <button disabled={saving || passwordForm.next.length < 12 || passwordForm.next !== passwordForm.confirm || (!clerkUser && !passwordForm.current)} className="inline-flex min-h-11 items-center rounded-full border border-lunetty-line px-5 text-sm font-semibold text-lunetty-ink transition hover:border-lunetty-gold disabled:cursor-not-allowed disabled:opacity-40">Modifier le mot de passe</button>
           </form>
-          <div className={`my-7 border-t ${dark ? "border-white/10" : "border-stone-200"}`} />
+          <div className="my-7 border-t border-lunetty-line" />
           <div className="space-y-3">
-            <h3 className={`text-sm font-bold ${heading}`}>Changer l’adresse e-mail</h3>
-            <p className={`text-xs ${muted}`}>Un lien de vérification sera envoyé à votre nouvelle adresse.</p>
+            <h3 className={`text-base font-semibold ${heading}`}>Changer l’adresse e-mail</h3>
+            <p className={`text-sm ${muted}`}>Un lien de vérification sera envoyé à votre nouvelle adresse.</p>
             <div className="flex flex-col sm:flex-row gap-2">
               <input type="email" autoComplete="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="nouvelle-adresse@exemple.com" className={`${inputStyle} flex-1`} />
-              <button type="button" disabled={saving || !clerkUser} onClick={() => void requestEmailLink()} className="shrink-0 rounded-xl bg-stone-900 px-4 py-3 text-xs font-bold text-white disabled:opacity-40 dark:bg-stone-100 dark:text-stone-950">Envoyer un lien</button>
+              <button type="button" disabled={saving || !clerkUser} onClick={() => void requestEmailLink()} className="min-h-11 shrink-0 rounded-full bg-lunetty-ink px-5 text-sm font-semibold text-lunetty-cream disabled:opacity-40">Envoyer un lien</button>
             </div>
-            {emailLinkSent && <p role="status" className="text-xs text-emerald-600 dark:text-emerald-300">Lien envoyé. Confirmez la nouvelle adresse depuis votre boîte e-mail.</p>}
-            {!clerkUser && <p className={`text-[11px] ${muted}`}>La modification vérifiée de l’adresse est gérée par le fournisseur d’identité du compte.</p>}
+            {emailLinkSent && <p role="status" className="text-sm text-emerald-800 dark:text-emerald-300">Lien envoyé. Confirmez la nouvelle adresse depuis votre boîte e-mail.</p>}
+            {!clerkUser && <p className={`text-sm ${muted}`}>La modification vérifiée de l’adresse est gérée par le fournisseur d’identité du compte.</p>}
           </div>
         </section>
 
-        <section id="preferences" className={panel}>
-          <h2 className={`text-lg font-bold ${heading}`}>Préférences</h2>
+        <section id="preferences" className={`${panel} scroll-mt-28`}>
+          <h2 className={`font-serif text-2xl ${heading}`}>Préférences</h2>
           <div className="mt-5 grid gap-6 sm:grid-cols-2">
-            <label className={`text-xs font-semibold ${muted}`}>Langue préférée
+            <label className={`text-sm font-semibold ${muted}`}>Langue préférée
               <select value={profile.langue_preferee ?? "fr"} onChange={(event) => void changeLanguage(event.target.value)} className={`${inputStyle} mt-1.5`}>
                 <option value="fr">Français</option><option value="en">English</option><option value="ar">العربية</option>
               </select>
             </label>
             <div>
-              <span className={`block text-xs font-semibold ${muted}`}>Apparence</span>
-              <button type="button" onClick={() => setThemeMode(dark ? "light" : "dark")} className={`mt-1.5 flex w-full items-center justify-between rounded-xl border px-4 py-3 text-sm ${dark ? "border-white/10 bg-[#100f0e]" : "border-stone-300 bg-white"}`}>
-                <span className="flex items-center gap-2">{dark ? <Moon className="h-4 w-4 text-amber-400" /> : <Sun className="h-4 w-4 text-amber-500" />}{dark ? "Mode sombre" : "Mode clair"}</span>
-                <span className="text-xs font-bold text-amber-600 dark:text-amber-200">Changer</span>
-              </button>
+              <span className={`block text-sm font-semibold ${muted}`}>Apparence</span>
+              <div role="group" aria-label="Apparence" className="mt-1.5 grid min-h-12 grid-cols-3 rounded-full border border-lunetty-line bg-lunetty-cream p-1">
+                <button type="button" aria-pressed={themeMode === "light"} onClick={() => setThemeMode("light")} className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-3 text-sm font-semibold transition ${themeMode === "light" ? "bg-lunetty-ink text-lunetty-cream shadow" : "text-lunetty-muted"}`}>
+                  <Sun aria-hidden="true" className="h-4 w-4" /> Clair
+                </button>
+                <button type="button" aria-pressed={themeMode === "dark"} onClick={() => setThemeMode("dark")} className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-3 text-sm font-semibold transition ${themeMode === "dark" ? "bg-lunetty-ink text-lunetty-cream shadow" : "text-lunetty-muted"}`}>
+                  <Moon aria-hidden="true" className="h-4 w-4" /> Sombre
+                </button>
+                <button type="button" aria-pressed={themeMode === "system"} onClick={() => setThemeMode("system")} className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-3 text-sm font-semibold transition ${themeMode === "system" ? "bg-lunetty-ink text-lunetty-cream shadow" : "text-lunetty-muted"}`}>
+                  <Monitor aria-hidden="true" className="hidden h-4 w-4 sm:block" /> Système
+                </button>
+              </div>
             </div>
           </div>
           <div className="mt-7 space-y-4">
-            <h3 className={`text-sm font-bold ${heading}`}>Notifications de réservation</h3>
+            <h3 className={`text-base font-semibold ${heading}`}>Notifications de réservation</h3>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-left text-xs">
-                <thead><tr className={`${muted}`}><th className="py-2 font-semibold">Type</th><th className="py-2 font-semibold">E-mail</th><th className="py-2 font-semibold">SMS</th></tr></thead>
+              <table className="w-full min-w-[560px] text-left text-sm">
+                <thead><tr className={`${muted}`}><th className="py-3 font-semibold">Type</th><th className="py-3 font-semibold">E-mail</th><th className="py-3 font-semibold">SMS</th></tr></thead>
                 <tbody>
                   {([
                     [CONFIRMATION_TYPE, "Confirmations de réservation"],
                     [REMINDER_TYPE, "Rappels la veille"],
                   ] as const).map(([type, label]) => (
-                    <tr key={type} className={`border-t ${dark ? "border-white/10" : "border-stone-200"}`}>
+                    <tr key={type} className="border-t border-lunetty-line">
                       <td className={`py-3 font-medium ${heading}`}>{label}</td>
                       {(["EMAIL", "SMS"] as const).map((channel) => (
                         <td key={channel} className="py-3">
-                          <input
-                            type="checkbox"
+                          <button
+                            type="button"
+                            role="switch"
                             aria-label={`${label} par ${channel === "EMAIL" ? "e-mail" : "SMS"}`}
-                            checked={notifications[`${type}:${channel}`] ?? false}
-                            onChange={(event) => void changePreference(type, channel, event.target.checked)}
-                            className="h-4 w-4 accent-amber-500"
-                          />
+                            aria-checked={notifications[`${type}:${channel}`] ?? false}
+                            onClick={() => void changePreference(type, channel, !(notifications[`${type}:${channel}`] ?? false))}
+                            className="relative h-11 w-14 rounded-full"
+                          >
+                            <span aria-hidden="true" className={`absolute inset-x-1 top-2 h-7 rounded-full transition-colors ${notifications[`${type}:${channel}`] ? "bg-lunetty-gold" : "bg-stone-300 dark:bg-stone-600"}`} />
+                            <span aria-hidden="true" className={`absolute left-1 top-3 h-5 w-5 rounded-full bg-white shadow transition-transform ${notifications[`${type}:${channel}`] ? "translate-x-7" : ""}`} />
+                          </button>
                         </td>
                       ))}
                     </tr>
@@ -803,36 +961,66 @@ export default function AccountSettingsPage() {
                 </tbody>
               </table>
             </div>
-            <p className={`text-[11px] ${muted}`}>Les notifications par e-mail et SMS sont envoyées uniquement si un canal de livraison est configuré pour votre compte.</p>
+            <p className={`text-sm ${muted}`}>Les notifications par e-mail et SMS sont envoyées uniquement si un canal de livraison est configuré pour votre compte.</p>
           </div>
         </section>
 
-        <section id="danger-zone" className={`rounded-3xl border p-6 sm:p-8 ${dark ? "border-rose-400/20 bg-rose-500/[0.03]" : "border-rose-200 bg-rose-50/60"}`}>
-          <h2 className="text-lg font-bold text-rose-700 dark:text-rose-300">Zone de danger</h2>
-          <p className={`mt-1 text-xs ${muted}`}>Téléchargez une copie de vos données ou supprimez votre compte.</p>
+        <section id="danger-zone" className="scroll-mt-28 rounded-[1.5rem] border border-lunetty-danger/25 bg-lunetty-danger/[0.035] p-5 sm:p-8">
+          <h2 className="font-serif text-2xl font-medium text-lunetty-danger">Zone de danger</h2>
+          <p className={`mt-1 text-sm ${muted}`}>Téléchargez une copie de vos données ou supprimez votre compte.</p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <button type="button" onClick={() => void exportData()} className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold ${dark ? "border-white/10 text-stone-200" : "border-stone-300 text-stone-800"}`}><Download className="h-4 w-4" /> Exporter mes données (JSON)</button>
-            <button type="button" onClick={() => { setShowDeleteModal(true); setDeleteConfirmation(""); }} className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-xs font-bold text-white hover:bg-rose-700"><Trash2 className="h-4 w-4" /> Supprimer mon compte</button>
+            <button type="button" onClick={() => void exportData()} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-lunetty-line px-5 text-sm font-semibold text-lunetty-ink"><Download aria-hidden="true" className="h-4 w-4" /> Exporter mes données (JSON)</button>
+            <button type="button" onClick={() => { setShowDeleteModal(true); setDeleteConfirmation(""); }} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-lunetty-danger/30 px-5 text-sm font-semibold text-lunetty-danger transition hover:bg-lunetty-danger/10"><Trash2 aria-hidden="true" className="h-4 w-4" /> Supprimer mon compte</button>
           </div>
         </section>
 
         <footer className="flex items-center justify-between pb-8">
-          <button type="button" onClick={goBack} className={`text-xs font-semibold ${muted}`}>← Retour</button>
-          {dirty && <span className="text-xs font-semibold text-amber-700 dark:text-amber-200">Modifications non enregistrées</span>}
+          <button type="button" onClick={goBack} className={`inline-flex min-h-11 items-center text-sm font-semibold ${muted}`}>← Retour</button>
         </footer>
       </div>
 
-      {toast && <div role="status" className="fixed bottom-5 right-5 z-[90] rounded-2xl bg-stone-900 px-5 py-3 text-sm text-white shadow-2xl">{toast}</div>}
+      </div>
+      </div>
+
+      {dirty && (
+        <div className="fixed inset-x-0 bottom-0 z-[80] border-t border-lunetty-line bg-lunetty-surface/95 px-4 py-3 shadow-[0_-12px_40px_rgba(26,23,19,0.12)] backdrop-blur sm:px-8">
+          <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-lunetty-ink">Modifications non enregistrées</p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setForm(initialForm);
+                  setAddressTouched(false);
+                  setProfileAttempted(false);
+                }}
+                className="inline-flex min-h-11 items-center rounded-full border border-lunetty-line px-4 text-sm font-semibold text-lunetty-ink"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                form="profile-form"
+                disabled={saving}
+                className="inline-flex min-h-11 items-center rounded-full bg-lunetty-ink px-5 text-sm font-semibold text-lunetty-cream disabled:opacity-40"
+              >
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {toast && <div role="status" className="fixed bottom-5 right-5 z-[90] rounded-2xl bg-lunetty-ink px-5 py-3 text-sm text-lunetty-cream shadow-2xl">{toast}</div>}
       {showDeleteModal && (
         <div role="dialog" aria-modal="true" aria-labelledby="delete-title" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 p-4">
-          <div className={`w-full max-w-md rounded-3xl border p-6 shadow-2xl ${dark ? "border-rose-400/20 bg-[#171514]" : "border-rose-200 bg-white"}`}>
-            <div className="flex items-start justify-between gap-4"><div><h2 id="delete-title" className="text-lg font-bold text-rose-600">Supprimer le compte ?</h2><p className={`mt-2 text-sm ${muted}`}>Cette action est irréversible. Vos documents de santé privés seront également supprimés.</p></div><button type="button" aria-label="Fermer" onClick={() => setShowDeleteModal(false)}><X className={muted} /></button></div>
-            <label className={`mt-5 block text-xs font-semibold ${muted}`}>Tapez SUPPRIMER pour confirmer
+          <div className="w-full max-w-md rounded-[1.5rem] border border-lunetty-danger/25 bg-lunetty-surface p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4"><div><h2 id="delete-title" className="font-serif text-2xl font-medium text-lunetty-danger">Supprimer le compte ?</h2><p className={`mt-2 text-sm ${muted}`}>Cette action est irréversible. Vos documents de santé privés seront également supprimés.</p></div><button type="button" aria-label="Fermer" onClick={() => setShowDeleteModal(false)} className="grid h-11 w-11 place-items-center rounded-full hover:bg-lunetty-cream"><X className={muted} /></button></div>
+            <label className={`mt-5 block text-sm font-semibold ${muted}`}>Tapez SUPPRIMER pour confirmer
               <input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} className={`${inputStyle} mt-1.5`} />
             </label>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setShowDeleteModal(false)} className={`rounded-xl px-4 py-2.5 text-xs font-semibold ${muted}`}>Annuler</button>
-              <button type="button" disabled={deleteConfirmation !== "SUPPRIMER" || saving} onClick={() => void deleteAccount()} className="rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40">{saving ? "Suppression…" : "Supprimer définitivement"}</button>
+              <button type="button" onClick={() => setShowDeleteModal(false)} className={`inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold ${muted}`}>Annuler</button>
+              <button type="button" disabled={deleteConfirmation !== "SUPPRIMER" || saving} onClick={() => void deleteAccount()} className="inline-flex min-h-11 items-center rounded-full bg-lunetty-danger px-5 text-sm font-semibold text-white disabled:opacity-40">{saving ? "Suppression…" : "Supprimer définitivement"}</button>
             </div>
           </div>
         </div>
@@ -852,25 +1040,203 @@ function Field({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="block text-xs font-semibold text-stone-600 dark:text-stone-400">{label}
-      <input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className={`${inputStyle} mt-1.5`} />
-      {error && <span className="mt-1 block text-[11px] font-medium text-rose-500">{error}</span>}
+    <label className="relative block pt-2 text-sm font-semibold text-lunetty-muted">
+      <span className="absolute left-3 top-0 z-10 rounded bg-lunetty-surface px-1 text-xs">{label}</span>
+      <input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className={`${inputStyle} pt-4`} />
+      {error && <span className="mt-1 block text-sm font-medium text-lunetty-danger">{error}</span>}
     </label>
   );
 }
 
+function dateFromInput(value: string) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function dateToInput(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function DatePicker({
+  label,
+  value,
+  min,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  min?: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const selected = dateFromInput(value);
+    const current = selected ?? new Date();
+    return new Date(current.getFullYear(), current.getMonth(), 1);
+  });
+  const selectedDate = dateFromInput(value);
+  const minDate = min ? dateFromInput(min) : null;
+  const monthLabel = new Intl.DateTimeFormat("fr-FR", {
+    month: "long",
+    year: "numeric",
+  }).format(visibleMonth);
+  const firstWeekday = (new Date(
+    visibleMonth.getFullYear(),
+    visibleMonth.getMonth(),
+    1,
+  ).getDay() + 6) % 7;
+  const daysInMonth = new Date(
+    visibleMonth.getFullYear(),
+    visibleMonth.getMonth() + 1,
+    0,
+  ).getDate();
+  const minMonth = minDate
+    ? new Date(minDate.getFullYear(), minDate.getMonth(), 1)
+    : null;
+  const previousMonth = new Date(
+    visibleMonth.getFullYear(),
+    visibleMonth.getMonth() - 1,
+    1,
+  );
+  const previousDisabled = Boolean(
+    minMonth && previousMonth.getTime() < minMonth.getTime(),
+  );
+  const displayValue = selectedDate
+    ? new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" }).format(selectedDate)
+    : "Sélectionner une date";
+
+  return (
+    <div className="relative min-w-0">
+      <span className="mb-1.5 block text-sm font-semibold text-lunetty-muted">{label}</span>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`${label} : ${displayValue}`}
+        onClick={() => {
+          if (!open) {
+            const selected = dateFromInput(value);
+            const current = selected ?? new Date();
+            setVisibleMonth(new Date(current.getFullYear(), current.getMonth(), 1));
+          }
+          setOpen((current) => !current);
+        }}
+        className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-lunetty-line bg-lunetty-surface px-4 text-left text-sm text-lunetty-ink outline-none transition hover:border-lunetty-gold focus-visible:ring-2 focus-visible:ring-lunetty-gold/20"
+      >
+        <span className={selectedDate ? "" : "text-lunetty-muted"}>{displayValue}</span>
+        <CalendarDays aria-hidden="true" className="h-4 w-4 shrink-0 text-lunetty-gold-strong" />
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          aria-label={`Calendrier : ${label}`}
+          className="absolute left-0 top-full z-50 mt-2 w-[min(21rem,calc(100vw-2.5rem))] rounded-2xl border border-lunetty-line bg-lunetty-surface p-3 shadow-xl"
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              aria-label="Mois précédent"
+              disabled={previousDisabled}
+              onClick={() => setVisibleMonth(previousMonth)}
+              className="grid h-11 w-11 place-items-center rounded-full text-lunetty-ink hover:bg-lunetty-cream disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+            </button>
+            <span className="text-sm font-semibold capitalize text-lunetty-ink">{monthLabel}</span>
+            <button
+              type="button"
+              aria-label="Mois suivant"
+              onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}
+              className="grid h-11 w-11 place-items-center rounded-full text-lunetty-ink hover:bg-lunetty-cream"
+            >
+              <ChevronRight aria-hidden="true" className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-7 text-center text-xs font-semibold text-lunetty-muted" aria-hidden="true">
+            {["Lu", "Ma", "Me", "Je", "Ve", "Sa", "Di"].map((day, index) => (
+              <span key={`${day}-${index}`} className="grid h-9 place-items-center">{day}</span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-0.5">
+            {Array.from({ length: firstWeekday + daysInMonth }, (_, index) => {
+              if (index < firstWeekday) return <span key={`empty-${index}`} aria-hidden="true" />;
+              const day = index - firstWeekday + 1;
+              const date = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), day);
+              const dateValue = dateToInput(date);
+              const isSelected = value === dateValue;
+              const disabled = Boolean(min && dateValue < min);
+              return (
+                <button
+                  key={dateValue}
+                  type="button"
+                  disabled={disabled}
+                  aria-label={new Intl.DateTimeFormat("fr-FR", { dateStyle: "full" }).format(date)}
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    onChange(dateValue);
+                    setOpen(false);
+                  }}
+                  className={`min-h-11 w-full rounded-full text-sm font-medium transition hover:bg-lunetty-gold/20 disabled:cursor-not-allowed disabled:opacity-30 ${
+                    isSelected ? "bg-lunetty-ink text-lunetty-cream hover:bg-lunetty-ink" : "text-lunetty-ink"
+                  }`}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+          {value && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+              className="mt-2 inline-flex min-h-11 items-center px-2 text-sm font-semibold text-lunetty-gold-strong hover:underline"
+            >
+              Effacer la date
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PasswordField({
-  label, value, inputStyle, onChange, disabled,
+  label, value, inputStyle, onChange, disabled, visible, autoComplete, onToggle,
 }: {
   label: string;
   value: string;
   inputStyle: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  visible: boolean;
+  autoComplete: "current-password" | "new-password";
+  onToggle: () => void;
 }) {
   return (
-    <label className="block text-xs font-semibold text-stone-600 dark:text-stone-400">{label}
-      <input type="password" autoComplete="new-password" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className={`${inputStyle} mt-1.5 disabled:opacity-50`} />
-    </label>
+    <div>
+      <label className="block text-sm font-semibold text-lunetty-muted">{label}</label>
+      <span className="relative mt-1.5 block">
+        <input
+          type={visible ? "text" : "password"}
+          autoComplete={autoComplete}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className={`${inputStyle} pr-12 disabled:opacity-50`}
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={visible ? `Masquer ${label.toLowerCase()}` : `Afficher ${label.toLowerCase()}`}
+          className="absolute right-1 top-1 grid h-10 w-10 place-items-center rounded-full text-lunetty-muted hover:bg-lunetty-cream"
+        >
+          {visible ? <EyeOff aria-hidden="true" className="h-4 w-4" /> : <Eye aria-hidden="true" className="h-4 w-4" />}
+        </button>
+      </span>
+    </div>
   );
 }

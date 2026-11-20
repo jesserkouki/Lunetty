@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" role="img" aria-label="Boutique partenaire">
+<defs><radialGradient id="g" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="#2d2923"/><stop offset="1" stop-color="#0b0b0a"/></radialGradient></defs>
+<rect width="1600" height="1000" fill="url(#g)"/>
+<rect x="272.0" y="327.20000000000005" width="480.0" height="345.59999999999997" rx="172.79999999999998" fill="none" stroke="#c9a96a" stroke-width="9.6"/><rect x="848.0" y="327.20000000000005" width="480.0" height="345.59999999999997" rx="172.79999999999998" fill="none" stroke="#c9a96a" stroke-width="9.6"/><path d="M752.0 465.44 Q800.0 389.408 848.0 465.44" fill="none" stroke="#c9a96a" stroke-width="9.6"/><path d="M272.0 430.88 L160.0 448.16" stroke="#c9a96a" stroke-width="9.6"/><path d="M1328.0 430.88 L1440.0 448.16" stroke="#c9a96a" stroke-width="9.6"/>
+</svg>

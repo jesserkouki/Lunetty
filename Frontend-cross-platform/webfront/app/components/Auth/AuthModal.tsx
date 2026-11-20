@@ -1,325 +1,516 @@
-'use client';
-import React, { useEffect, useState } from 'react';
-import { Eye, EyeOff, Glasses, Loader2, Store, User, X } from 'lucide-react';
-import { useClerk } from '@clerk/nextjs';
-import {
-  AccountType, ApiError, AuthUser,
-  login, register, resolveAccountType, setToken,
-  setSpace as persistSpace,
-} from '@/lib/auth';
+"use client";
 
-type Mode = 'login' | 'signup';
+import { AnimatePresence, motion } from "motion/react";
+import { useClerk } from "@clerk/nextjs";
+import Image from "next/image";
+import { ArrowLeft, ArrowUpRight, Glasses, Store, X } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent,
+  type TouchEvent,
+} from "react";
+import { useTheme } from "@/contexts/ThemeContext";
+import {
+  AccountType,
+  ApiError,
+  AuthUser,
+  login,
+  register,
+  resolveAccountType,
+  setToken,
+  setSpace as persistSpace,
+} from "@/lib/auth";
+import { useReducedMotion } from "@/lib/motion/useReducedMotion";
+import AuthTabs, { type AuthMode } from "./AuthTabs";
+import LoginForm, { type LoginPayload } from "./LoginForm";
+import PasswordResetForm from "./PasswordResetForm";
+import RegisterForm, { type RegisterPayload } from "./RegisterForm";
+import SocialButtons, { type SocialProvider } from "./SocialButtons";
+import LogoWordmark from "../ui/LogoWordmark";
+import styles from "./AuthModal.module.css";
 
 type Props = {
   open: boolean;
-  dark: boolean;
-  initialMode?: Mode;
+  dark?: boolean;
+  initialMode?: AuthMode;
   initialSpace?: AccountType;
   initialError?: string;
   onClose: () => void;
   onSuccess: (user: AuthUser, accountType: AccountType) => void;
 };
 
-const MIN_PASSWORD = 12;
-const EMPTY = { prenom: '', nom: '', email: '', password: '', confirm: '' };
+type Screen = "form" | "reset";
+type SocialStrategy = "oauth_google";
+
+const SOCIAL_STRATEGY: Record<SocialProvider, SocialStrategy> = {
+  google: "oauth_google",
+};
+
+const TAB_STOPPABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+type HeroImageStyle = CSSProperties & {
+  "--hero-offset-x": string;
+  "--hero-offset-y": string;
+};
+
+const INITIAL_HERO_IMAGE_STYLE: HeroImageStyle = {
+  "--hero-offset-x": "0px",
+  "--hero-offset-y": "0px",
+};
 
 export default function AuthModal({
   open,
   dark,
-  initialMode = 'login',
-  initialSpace = 'CLIENT',
-  initialError = '',
+  initialMode = "login",
+  initialSpace = "CLIENT",
+  initialError = "",
   onClose,
   onSuccess,
 }: Props) {
-  const [mode, setMode] = useState<Mode>(initialMode);
-  const [space, setSpace] = useState<AccountType>(initialSpace);
-  const [form, setForm] = useState(EMPTY);
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState(initialError);
-  const [loading, setLoading] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const reducedMotion = useReducedMotion();
   const clerk = useClerk();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const touchStartY = useRef<number | null>(null);
+  const [mode, setMode] = useState<AuthMode>(initialMode);
+  const [space, setSpace] = useState<AccountType>(initialSpace);
+  const [screen, setScreen] = useState<Screen>("form");
+  const [resetEmail, setResetEmail] = useState("");
+  const [error, setError] = useState(initialError);
+  const [busy, setBusy] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
+  const [desktopHero, setDesktopHero] = useState(false);
+  const [animateHero, setAnimateHero] = useState(false);
+  const [heroImageLoaded, setHeroImageLoaded] = useState(false);
+  const [heroImageFailed, setHeroImageFailed] = useState(false);
+  const [heroImageStyle, setHeroImageStyle] = useState(INITIAL_HERO_IMAGE_STYLE);
+  const isDark = dark ?? resolvedTheme === "dark";
+  const isPro = space === "OPTICIAN";
+
+  useEffect(() => {
+    const desktopQuery = window.matchMedia("(min-width: 768px)");
+    const finePointerQuery = window.matchMedia(
+      "(hover: hover) and (pointer: fine)",
+    );
+    const updateHeroMedia = () => {
+      setDesktopHero(desktopQuery.matches);
+      setAnimateHero(
+        desktopQuery.matches && finePointerQuery.matches && !reducedMotion,
+      );
+    };
+
+    updateHeroMedia();
+    desktopQuery.addEventListener("change", updateHeroMedia);
+    finePointerQuery.addEventListener("change", updateHeroMedia);
+    return () => {
+      desktopQuery.removeEventListener("change", updateHeroMedia);
+      finePointerQuery.removeEventListener("change", updateHeroMedia);
+    };
+  }, [reducedMotion]);
+
+  const closeIfIdle = useCallback(() => {
+    if (!busy && !socialLoading) onClose();
+  }, [busy, onClose, socialLoading]);
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !loading && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, loading, onClose]);
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => {
+      const dialog = dialogRef.current;
+      (dialog?.querySelector<HTMLElement>("input:not([disabled])") ??
+        dialog?.querySelector<HTMLElement>(TAB_STOPPABLE))?.focus();
+    });
 
-  if (!open) return null;
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+    };
+  }, [open]);
 
-  const isSignup = mode === 'signup';
-  const isPro = space === 'OPTICIAN';
-  const set = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  useEffect(() => {
+    if (!open) return;
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loading) return;
-    setError('');
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeIfIdle();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
 
-    if (isSignup) {
-      if (form.password.length < MIN_PASSWORD)
-        return setError(`Le mot de passe doit contenir au moins ${MIN_PASSWORD} caractères.`);
-      if (form.password !== form.confirm)
-        return setError('Les mots de passe ne correspondent pas.');
-    }
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(TAB_STOPPABLE),
+      ).filter((element) => element.offsetParent !== null);
+      if (!focusable.length) {
+        event.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!dialogRef.current.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
 
-    setLoading(true);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [closeIfIdle, open]);
+
+  const displayError = (reason: unknown, fallback: string) => {
+    setError(reason instanceof ApiError || reason instanceof Error ? reason.message : fallback);
+  };
+
+  const handleLogin = async ({ email, password, remember }: LoginPayload) => {
+    setError("");
+    setBusy(true);
     try {
-      const { user, accessToken } = isSignup
-        ? await register({
-            prenom: form.prenom.trim(),
-            nom: form.nom.trim(),
-            email: form.email.trim(),
-            password: form.password,
-            accountType: space,
-          })
-        : await login(form.email.trim(), form.password);
-
-      setToken(accessToken);
+      const { user, accessToken } = await login(email, password);
+      setToken(accessToken, remember);
       persistSpace(space);
       const accountType = await resolveAccountType(accessToken);
-
-
       onSuccess(user, accountType);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Une erreur est survenue.');
+    } catch (reason) {
+      displayError(reason, "La connexion a échoué. Réessayez.");
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
-  const continueWithGoogle = async () => {
-    if (loading) return;
-    setError('');
-    setLoading(true);
+  const handleRegister = async ({ prenom, nom, email, password }: RegisterPayload) => {
+    setError("");
+    setBusy(true);
+    try {
+      const { user, accessToken } = await register({
+        prenom,
+        nom,
+        email,
+        password,
+        accountType: space,
+      });
+      setToken(accessToken);
+      persistSpace(space);
+      const accountType = await resolveAccountType(accessToken);
+      onSuccess(user, accountType);
+    } catch (reason) {
+      displayError(reason, "La création du compte a échoué. Réessayez.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSocial = async (provider: SocialProvider) => {
+    if (busy || socialLoading) return;
+    setError("");
+    setSocialLoading(provider);
     persistSpace(space);
 
     try {
       const client = clerk.client;
-      if (!client) {
-        throw new Error('Le service de connexion n’est pas encore prêt.');
-      }
+      if (!client) throw new Error("Le service de connexion n’est pas encore prêt.");
+      const strategy = SOCIAL_STRATEGY[provider];
 
-      if (isSignup) {
+      if (mode === "signup") {
         await client.signUp.authenticateWithRedirect({
-          strategy: 'oauth_google',
-          redirectUrl: '/sso-callback',
-          redirectUrlComplete: '/auth/complete',
+          strategy,
+          redirectUrl: "/sso-callback",
+          redirectUrlComplete: "/auth/complete",
           continueSignUp: false,
         });
       } else {
         await client.signIn.authenticateWithRedirect({
-          strategy: 'oauth_google',
-          redirectUrl: '/sso-callback',
-          redirectUrlComplete: '/auth/complete',
+          strategy,
+          redirectUrl: "/sso-callback",
+          redirectUrlComplete: "/auth/complete",
           continueSignIn: false,
         });
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'La connexion Google a échoué.');
+    } catch (reason) {
+      displayError(reason, `La connexion avec ${provider} a échoué.`);
     } finally {
-      setLoading(false);
+      setSocialLoading(null);
     }
   };
 
-  const inputCls = `w-full border rounded-2xl px-4 py-3 text-xs outline-none focus:border-amber-500 transition-colors ${
-    dark ? 'bg-[#121110] border-white/10 text-stone-200' : 'bg-stone-50 border-stone-300 text-stone-900'
-  }`;
-  const labelCls = 'text-[10px] font-bold uppercase tracking-widest text-stone-500 block mb-1.5';
-  const pwLen = Math.min(form.password.length, MIN_PASSWORD);
+  const changeMode = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setScreen("form");
+    setError("");
+  };
 
-  const segment = (active: boolean) =>
-    `flex items-center justify-center gap-2 py-3 text-[11px] font-bold rounded-2xl uppercase tracking-wider transition-all ${
-      active
-        ? dark ? 'bg-stone-100 text-stone-950 shadow-xl' : 'bg-stone-900 text-white shadow-xl'
-        : 'text-stone-500 hover:text-amber-600 dark:hover:text-amber-200'
-    }`;
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    touchStartY.current = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    const startY = touchStartY.current;
+    touchStartY.current = null;
+    const endY = event.changedTouches[0]?.clientY;
+    if (startY !== null && endY !== undefined && endY - startY > 90) {
+      closeIfIdle();
+    }
+  };
+
+  const handleHeroPointerMove = (event: PointerEvent<HTMLElement>) => {
+    if (!animateHero || event.pointerType !== "mouse") return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    setHeroImageStyle({
+      "--hero-offset-x": `${x * 20}px`,
+      "--hero-offset-y": `${y * 20}px`,
+    });
+  };
+
+  const resetHeroPointer = () => setHeroImageStyle(INITIAL_HERO_IMAGE_STYLE);
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
-      onMouseDown={(e) => e.target === e.currentTarget && !loading && onClose()}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        className={`border w-full max-w-md rounded-3xl p-8 shadow-2xl relative my-8 overflow-hidden backdrop-blur-2xl ${
-          dark ? 'bg-[#171514]/95 border-white/10' : 'bg-white/95 border-stone-200'
-        }`}
-      >
-        {/* Ambient Warm Glow, matching page.tsx hero cards */}
-        <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[100px] bg-amber-400 opacity-20 pointer-events-none" />
-
-        <button
-          onClick={onClose}
-          aria-label="Fermer"
-          className="absolute top-5 right-5 p-2 text-stone-400 hover:text-stone-700 dark:hover:text-white z-10 transition-colors"
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="auth-modal-backdrop"
+          className={`fixed inset-0 z-[100] flex items-end justify-center p-0 md:items-center md:p-5 ${styles.backdrop}`}
+          initial={reducedMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={reducedMotion ? undefined : { opacity: 0 }}
+          transition={{ duration: reducedMotion ? 0 : 0.2 }}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeIfIdle();
+          }}
         >
-          <X className="w-5 h-5" />
-        </button>
-
-        <div className="relative">
-          {/* Brand mark */}
-          <div className="flex flex-col items-center mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-stone-200 via-amber-200 to-amber-500 p-[1.5px]">
-              <div className={`w-full h-full rounded-[14px] flex items-center justify-center ${dark ? 'bg-[#121110]' : 'bg-stone-900'}`}>
-                <Glasses className="w-6 h-6 text-amber-200" />
-              </div>
-            </div>
-            <h2 className={`mt-4 text-2xl font-light tracking-wider font-display ${dark ? 'text-white' : 'text-stone-900'}`}>
-              {isSignup ? 'Créer un compte' : 'Connexion'}
-            </h2>
-            <span className="text-[9px] font-bold text-amber-600 dark:text-amber-200/80 tracking-[0.3em] uppercase mt-1">
-              Lunnetty
-            </span>
-          </div>
-
-          {/* Space Segmented Switcher: Client / Pro */}
-          <div className={`grid grid-cols-2 gap-1 p-1 rounded-2xl mb-3 border ${
-            dark ? 'bg-[#100f0e] border-white/10' : 'bg-stone-100 border-stone-200'
-          }`}>
-            <button type="button" className={segment(!isPro)} onClick={() => { setSpace('CLIENT'); setError(''); }}>
-              <User className="w-3.5 h-3.5" /> Espace Client
-            </button>
-            <button type="button" className={segment(isPro)} onClick={() => { setSpace('OPTICIAN'); setError(''); }}>
-              <Store className="w-3.5 h-3.5" /> Espace Pro
-            </button>
-          </div>
-
-          {/* Mode Segmented Switcher: login / signup */}
-          <div className={`grid grid-cols-2 gap-1 p-1 rounded-2xl mb-6 border ${
-            dark ? 'bg-[#100f0e] border-white/10' : 'bg-stone-100 border-stone-200'
-          }`}>
-            {(['login', 'signup'] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                className={segment(mode === m)}
-                onClick={() => { setMode(m); setError(''); }}
-              >
-                {m === 'login' ? 'Connexion' : 'Inscription'}
-              </button>
-            ))}
-          </div>
-
-          {isSignup && isPro && (
-            <p className={`text-[11px] leading-relaxed rounded-2xl px-4 py-3 mb-4 border ${
-              dark ? 'bg-amber-200/5 border-amber-200/20 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'
-            }`}>
-              Créez d&apos;abord votre compte. Le rattachement de votre magasin se fera ensuite depuis l&apos;espace pro.
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={continueWithGoogle}
-            disabled={loading}
-            className={`w-full py-3.5 rounded-2xl border font-semibold text-xs flex items-center justify-center gap-3 transition-colors disabled:opacity-60 ${
-              dark
-                ? 'border-white/15 bg-white/5 text-stone-100 hover:bg-white/10'
-                : 'border-stone-300 bg-white text-stone-800 hover:bg-stone-50'
+          <motion.div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-title"
+            tabIndex={-1}
+            className={`auth-modal-card relative flex h-[100dvh] w-full flex-col overflow-hidden border border-line bg-background text-foreground shadow-2xl md:h-auto md:max-h-[min(90dvh,820px)] md:max-w-5xl md:grid-cols-[0.88fr_1fr] md:rounded-[2rem] md:border md:grid ${
+              isDark ? "dark" : ""
             }`}
+            initial={reducedMotion ? false : { y: 22, rotateX: -4, scale: 0.985 }}
+            animate={{ y: 0, rotateX: 0, scale: 1 }}
+            exit={reducedMotion ? undefined : { y: 14, opacity: 0, scale: 0.99 }}
+            transition={{ type: "spring", stiffness: 280, damping: 28 }}
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-              <span aria-hidden="true" className="font-bold text-base text-[#4285f4]">G</span>
-            )}
-            {isSignup ? "S'inscrire avec Google" : 'Continuer avec Google'}
-          </button>
-
-          <div className="flex items-center gap-3 my-5 text-[10px] uppercase tracking-widest text-stone-500">
-            <span className="h-px flex-1 bg-stone-300/70 dark:bg-white/10" />
-            ou avec votre email
-            <span className="h-px flex-1 bg-stone-300/70 dark:bg-white/10" />
-          </div>
-
-          <form onSubmit={submit} className="space-y-4">
-            {isSignup && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls} htmlFor="auth-prenom">Prénom</label>
-                  <input id="auth-prenom" required maxLength={100} autoFocus value={form.prenom}
-                    onChange={set('prenom')} autoComplete="given-name" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls} htmlFor="auth-nom">Nom</label>
-                  <input id="auth-nom" required maxLength={100} value={form.nom}
-                    onChange={set('nom')} autoComplete="family-name" className={inputCls} />
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className={labelCls} htmlFor="auth-email">Email</label>
-              <input id="auth-email" type="email" required maxLength={255} autoFocus={!isSignup}
-                value={form.email} onChange={set('email')} placeholder="nom@domaine.tn"
-                autoComplete="email" className={inputCls} />
+            <div
+              className="absolute inset-x-0 top-0 z-30 flex h-7 items-center justify-center md:hidden"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
+              <span aria-hidden="true" className="h-1 w-10 rounded-full bg-foreground/20" />
             </div>
 
-            <div>
-              <label className={labelCls} htmlFor="auth-password">Mot de passe</label>
-              <div className="relative">
-                <input id="auth-password" type={showPassword ? 'text' : 'password'} required
-                  value={form.password} onChange={set('password')}
-                  autoComplete={isSignup ? 'new-password' : 'current-password'}
-                  placeholder={isSignup ? `${MIN_PASSWORD} caractères minimum` : '••••••••'}
-                  className={`${inputCls} pr-10`} />
-                <button type="button" onClick={() => setShowPassword((s) => !s)}
-                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-amber-500">
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            <aside
+              className="relative isolate hidden min-h-[620px] flex-col justify-between overflow-hidden rounded-l-[2rem] bg-[#1a1713] px-9 py-10 text-[#f5f0e7] md:flex"
+              onPointerMove={handleHeroPointerMove}
+              onPointerLeave={resetHeroPointer}
+            >
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_55%_38%,rgba(198,166,116,0.2),transparent_58%),linear-gradient(150deg,#2c261f,#171512)]"
+              />
+              {desktopHero && !heroImageFailed ? (
+                <Image
+                  src="/images/auth/login-lunettes.jpg"
+                  alt="Monture de lunettes dorée, rendu 3D de studio"
+                  fill
+                  priority
+                  sizes="(min-width: 1280px) 440px, (min-width: 768px) 42vw"
+                  placeholder="blur"
+                  blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABcQERQRDhcUEhQaGBcbIjklIh8fIkYyNSk5UkhXVVFIUE5bZoNvW2F8Yk5QcptzfIeLkpSSWG2grJ+OqoOPko3/2wBDARgaGiIeIkMlJUONXlBejY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY3/wAARCAAkABQDASIAAhEBAxEB/8QAGAABAQEBAQAAAAAAAAAAAAAAAAEEAgb/xAAaEAEAAgMBAAAAAAAAAAAAAAAAAQMREiEC/8QAFgEBAQEAAAAAAAAAAAAAAAAAAQAC/8QAFREBAQAAAAAAAAAAAAAAAAAAABH/2gAMAwEAAhEDEQA/APMYTDRXXPtbKJ8wKYzCzHQhopu0d23bQxxxdmYasz0c5CgAgASf/9k="
+                  onLoad={() => setHeroImageLoaded(true)}
+                  onError={() => setHeroImageFailed(true)}
+                  style={heroImageStyle}
+                  className={`${styles.heroImage} ${heroImageLoaded ? styles.heroImageLoaded : ""} ${animateHero ? styles.heroImageAnimated : ""}`}
+                />
+              ) : null}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-0 top-0 z-[2] h-[25%] bg-[linear-gradient(180deg,rgba(26,23,19,0.7)_0%,rgba(26,23,19,0)_100%)]"
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[45%] bg-[linear-gradient(0deg,rgba(26,23,19,0.9)_0%,rgba(26,23,19,0)_100%)]"
+              />
+              <div className="relative z-10 flex items-center gap-3">
+                <span className="grid h-10 w-10 place-items-center border border-[#c6a674]/50 bg-[#c6a674]/10">
+                  <Glasses size={20} className="text-[#d7bd92]" />
+                </span>
+                <LogoWordmark variant="gold" size="md" spacing="0.14em" />
               </div>
 
-              {isSignup && (
-                <div className="mt-2.5 flex items-center gap-2">
-                  <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${dark ? 'bg-white/10' : 'bg-stone-200'}`}>
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${pwLen >= MIN_PASSWORD ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                      style={{ width: `${(pwLen / MIN_PASSWORD) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] font-mono text-stone-500">{pwLen}/{MIN_PASSWORD}</span>
-                </div>
-              )}
-            </div>
-
-            {isSignup && (
-              <div>
-                <label className={labelCls} htmlFor="auth-confirm">Confirmer le mot de passe</label>
-                <input id="auth-confirm" type={showPassword ? 'text' : 'password'} required
-                  value={form.confirm} onChange={set('confirm')} autoComplete="new-password"
-                  className={inputCls} />
+              <div className="relative z-10">
+                <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#c6a674]">
+                  Le style, sans compromis
+                </p>
+                <h2 className="max-w-sm font-serif text-4xl leading-[1.05]">
+                  Essayez en un clic, adoptez pour toujours.
+                </h2>
+                <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/70">
+                  Une sélection choisie, un essayage simple, votre regard.
+                </p>
               </div>
-            )}
+              <span aria-hidden="true" className="absolute -bottom-28 -right-20 h-72 w-72 rounded-full border border-[#c6a674]/15" />
+            </aside>
 
-            {error && (
-              <div role="alert" className="text-xs font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-2xl px-4 py-3">
-                {error}
-              </div>
-            )}
-
-            <button type="submit" disabled={loading}
-              className={`w-full py-4 rounded-2xl font-bold text-xs uppercase tracking-wider shadow-xl disabled:opacity-60 flex items-center justify-center gap-2 transition-all ${
-                dark ? 'bg-stone-100 hover:bg-amber-100 text-stone-950' : 'bg-stone-900 hover:bg-stone-800 text-white'
-              }`}>
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isSignup ? 'Créer mon compte' : isPro ? "Accéder à l'espace pro" : 'Se connecter'}
-            </button>
-
-            <p className="text-center text-xs text-stone-500 pt-1">
-              {isSignup ? 'Déjà un compte ?' : 'Pas encore de compte ?'}{' '}
-              <button type="button"
-                onClick={() => { setMode(isSignup ? 'login' : 'signup'); setError(''); }}
-                className="font-bold text-amber-600 dark:text-amber-200 hover:underline">
-                {isSignup ? 'Se connecter' : "S'inscrire"}
+            <section className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-8 pt-10 sm:px-9 sm:pt-12 md:px-10 md:py-10">
+              <button
+                type="button"
+                onClick={closeIfIdle}
+                aria-label="Fermer la fenêtre de connexion"
+                className="absolute right-4 top-8 z-20 grid h-10 w-10 place-items-center rounded-full text-muted transition hover:bg-accent/10 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:right-6 md:top-6"
+              >
+                <X size={19} />
               </button>
-            </p>
-          </form>
-        </div>
-      </div>
-    </div>
+
+              <header className="mb-6 pr-12 md:mb-7 md:pr-10">
+                {screen === "reset" ? (
+                  <button
+                    type="button"
+                    onClick={() => setScreen("form")}
+                    className="mb-4 inline-flex items-center gap-2 text-xs font-semibold text-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                  >
+                    <ArrowLeft size={15} /> Retour
+                  </button>
+                ) : null}
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-accent">
+                  Lunetty · L&apos;optique, autrement
+                </p>
+                <h1 id="auth-title" className="font-serif text-3xl font-medium italic tracking-tight text-foreground sm:text-4xl">
+                  {screen === "reset"
+                    ? "Retrouver l’accès"
+                    : mode === "signup"
+                      ? "Créer un compte"
+                      : "Bienvenue"}
+                </h1>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  {screen === "reset"
+                    ? "Récupérez votre accès à votre espace Lunetty."
+                    : mode === "signup"
+                      ? "Rejoignez une nouvelle façon de choisir vos lunettes."
+                      : "Retrouvez votre sélection et vos opticiens favoris."}
+                </p>
+              </header>
+
+              {screen === "reset" ? (
+                <PasswordResetForm
+                  initialEmail={resetEmail}
+                  onBack={() => {
+                    setMode("login");
+                    setScreen("form");
+                  }}
+                />
+              ) : (
+                <>
+                  <div className="mb-5">
+                    <AuthTabs mode={mode} onChange={changeMode} />
+                  </div>
+
+                  <div className="mb-5">
+                    {isPro ? (
+                      <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-accent">
+                        <Store size={14} /> Mode espace opticien activé
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSpace(isPro ? "CLIENT" : "OPTICIAN");
+                        setError("");
+                      }}
+                      className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                        isPro
+                          ? "border-accent bg-accent text-white shadow-md"
+                          : "border-accent/45 bg-accent/10 text-foreground hover:border-accent hover:bg-accent/15"
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className={`grid h-9 w-9 place-items-center rounded-full ${
+                          isPro ? "bg-white/15" : "bg-accent/15 text-accent"
+                        }`}>
+                          <Store size={18} />
+                        </span>
+                        <span>
+                          <span className="block text-xs font-bold uppercase tracking-[0.1em]">
+                            {isPro ? "Espace opticien sélectionné" : "Vous êtes opticien ?"}
+                          </span>
+                          <span className={`mt-0.5 block text-xs ${
+                            isPro ? "text-white/85" : "text-muted"
+                          }`}>
+                            {isPro ? "Revenir à l’espace client" : "Accéder à votre espace professionnel"}
+                          </span>
+                        </span>
+                      </span>
+                      <ArrowUpRight size={17} aria-hidden="true" />
+                    </button>
+                  </div>
+
+                  <div id="auth-panel" role="tabpanel" aria-labelledby={`auth-tab-${mode}`} className="space-y-4">
+                    <SocialButtons
+                      onSelect={handleSocial}
+                      loadingProvider={socialLoading}
+                      disabled={busy}
+                    />
+                    <div className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
+                      <span className="h-px flex-1 bg-line" />
+                      ou avec votre e-mail
+                      <span className="h-px flex-1 bg-line" />
+                    </div>
+
+                    {mode === "login" ? (
+                      <LoginForm
+                        busy={busy || socialLoading !== null}
+                        error={error}
+                        onSubmit={handleLogin}
+                        onForgotPassword={(email) => {
+                          setResetEmail(email);
+                          setScreen("reset");
+                          setError("");
+                        }}
+                      />
+                    ) : (
+                      <RegisterForm
+                        space={space}
+                        busy={busy || socialLoading !== null}
+                        error={error}
+                        onSubmit={handleRegister}
+                      />
+                    )}
+                  </div>
+
+                  {mode === "login" && (
+                    <p className="mt-5 text-center text-sm text-muted">
+                      Pas encore de compte ?{" "}
+                      <button
+                        type="button"
+                        onClick={() => changeMode("signup")}
+                        className="font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      >
+                        S&apos;inscrire
+                      </button>
+                    </p>
+                  )}
+                </>
+              )}
+            </section>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

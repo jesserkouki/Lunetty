@@ -55,7 +55,6 @@ function SignInContent() {
     <main className="min-h-screen">
       <AuthModal
         open
-        dark={false}
         initialMode={searchParams.get('mode') === 'signup' ? 'signup' : 'login'}
         initialSpace={initialSpace}
         initialError={initialError}

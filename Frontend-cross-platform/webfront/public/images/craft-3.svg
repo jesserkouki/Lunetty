@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1500" width="1200" height="1500" role="img" aria-label="Verres, contrôle de précision">
+<defs><radialGradient id="g" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="#262a2e"/><stop offset="1" stop-color="#0c0d0e"/></radialGradient></defs>
+<rect width="1200" height="1500" fill="url(#g)"/>
+<rect x="204.0" y="620.4" width="360.0" height="259.2" rx="129.6" fill="none" stroke="#a9b4bd" stroke-width="7.2"/><rect x="636.0" y="620.4" width="360.0" height="259.2" rx="129.6" fill="none" stroke="#a9b4bd" stroke-width="7.2"/><path d="M564.0 724.08 Q600.0 667.056 636.0 724.08" fill="none" stroke="#a9b4bd" stroke-width="7.2"/><path d="M204.0 698.16 L119.99999999999999 711.12" stroke="#a9b4bd" stroke-width="7.2"/><path d="M996.0 698.16 L1080.0 711.12" stroke="#a9b4bd" stroke-width="7.2"/>
+</svg>
