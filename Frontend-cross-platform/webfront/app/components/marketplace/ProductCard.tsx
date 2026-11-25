@@ -3,10 +3,12 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useId, useState, useSyncExternalStore } from "react";
-import { Heart, MapPin } from "lucide-react";
+import { useCallback, useEffect, useId, useState } from "react";
+import { MapPin } from "lucide-react";
 import type { Frame, FrameColorOption } from "../../data/marketplace-demo";
 import { getFrameHref } from "../../lib/marketplace";
+import { isFavoriteProductId } from "@/lib/favorites";
+import FavoriteButton from "@/app/components/Favorites/FavoriteButton";
 import { useReducedMotion } from "../../../lib/motion/useReducedMotion";
 import ColorSwatches from "./ColorSwatches";
 import TiltCard from "./TiltCard";
@@ -14,33 +16,6 @@ import { claimViewerCanvas, releaseViewerCanvas, useViewerCanvas } from "./viewe
 
 const FALLBACK_IMAGE = "/images/frame-placeholder.svg";
 const LazyGlassesViewer3D = dynamic(() => import("./GlassesViewer3D"), { ssr: false });
-const FAVORITES_KEY = "lunetty:favorites";
-
-function parseFavoriteIds(snapshot: string) {
-  try {
-    const value: unknown = JSON.parse(snapshot);
-    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function getFavoriteSnapshot() {
-  try {
-    return JSON.stringify(parseFavoriteIds(localStorage.getItem(FAVORITES_KEY) ?? "[]"));
-  } catch {
-    return "[]";
-  }
-}
-
-function subscribeToFavorites(onChange: () => void) {
-  window.addEventListener("storage", onChange);
-  window.addEventListener("lunetty:favorites-changed", onChange);
-  return () => {
-    window.removeEventListener("storage", onChange);
-    window.removeEventListener("lunetty:favorites-changed", onChange);
-  };
-}
 
 const COLOR_TONES: Record<string, [string, string, string]> = {
   noir: ["#343230", "#111110", "#c5c2bc"],
@@ -65,36 +40,6 @@ function cardTone(color: string) {
 
 function formatCardPrice(price: number) {
   return `${new Intl.NumberFormat("fr-TN", { maximumFractionDigits: 3 }).format(price)} DT`;
-}
-
-function FavoriteButton({ frame }: { frame: Frame }) {
-  const snapshot = useSyncExternalStore(subscribeToFavorites, getFavoriteSnapshot, () => "[]");
-  const saved = parseFavoriteIds(snapshot).includes(frame.productId);
-
-  const toggle = () => {
-    try {
-      const favorites = parseFavoriteIds(getFavoriteSnapshot());
-      const next = saved
-        ? favorites.filter((id) => id !== frame.productId)
-        : [...new Set([...favorites, frame.productId])];
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
-      window.dispatchEvent(new CustomEvent("lunetty:favorites-changed"));
-    } catch (error) {
-      console.error("Impossible de mettre à jour les favoris locaux.", error);
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      aria-label={saved ? `Retirer ${frame.name} des favoris` : `Ajouter ${frame.name} aux favoris`}
-      aria-pressed={saved}
-      onClick={toggle}
-      className="absolute right-3 top-3 z-40 grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-black/35 text-white shadow-sm backdrop-blur-md transition hover:scale-105 hover:bg-black/55 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-    >
-      <Heart aria-hidden="true" className={`h-5 w-5 ${saved ? "fill-white" : ""}`} />
-    </button>
-  );
 }
 
 export default function ProductCard({ frame, badge }: { frame: Frame; badge?: string }) {
@@ -184,7 +129,12 @@ export default function ProductCard({ frame, badge }: { frame: Frame; badge?: st
                 {badge}
               </span>
             ) : null}
-            <FavoriteButton frame={frame} />
+            {isFavoriteProductId(frame.productId) && (
+              <FavoriteButton
+                productId={frame.productId}
+                dark
+              />
+            )}
           </div>
 
           <div className="pointer-events-none relative z-20 flex flex-1 flex-col px-4 pb-4 pt-1.5 sm:px-5 sm:pb-5">

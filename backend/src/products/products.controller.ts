@@ -28,6 +28,7 @@ import { ProductImageSearchService } from '../catalogue/product-image-search.ser
 import { ProductImageSuggestionsDto } from '../catalogue/dto/product-image-suggestions.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
+import { QueryProductsByIdsDto } from './dto/query-products-by-ids.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
@@ -88,6 +89,14 @@ export class ProductsController {
   @ApiOperation({ summary: 'Search the active product catalog' })
   list(@Query() query: QueryProductsDto) {
     return this.products.list(query);
+  }
+
+  @Get('by-ids')
+  @ApiOperation({
+    summary: 'Get active, non-deleted catalog products by IDs',
+  })
+  findByIds(@Query() query: QueryProductsByIdsDto) {
+    return this.products.findPublicByIds(query.ids);
   }
 
   @Get(':productId')

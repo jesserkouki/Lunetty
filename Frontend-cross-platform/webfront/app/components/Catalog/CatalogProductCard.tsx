@@ -1,21 +1,18 @@
 "use client";
 
 import { Glasses, MapPin } from "lucide-react";
-import type { FavoriteReturnTab } from "@/lib/favorites";
 import type { CatalogProduct } from "@/services/products.service";
 import FavoriteButton from "@/app/components/Favorites/FavoriteButton";
 
 type Props = {
   product: CatalogProduct;
   dark: boolean;
-  returnTab: FavoriteReturnTab;
   onReserve?: (product: CatalogProduct) => void;
 };
 
 export default function CatalogProductCard({
   product,
   dark,
-  returnTab,
   onReserve,
 }: Props) {
   const price = product.price === null ? null : Number(product.price);
@@ -62,7 +59,6 @@ export default function CatalogProductCard({
           <FavoriteButton
             productId={product.id}
             dark={dark}
-            returnTab={returnTab}
           />
         </div>
 

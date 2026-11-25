@@ -12,7 +12,7 @@ type Props = {
 };
 
 export default function FavoritesPage({ dark, onBrowse, onReserve }: Props) {
-  const { favorites, isLoading, loadError, refresh } = useFavorites();
+  const { favorites, isLoading, error, refresh } = useFavorites();
   const products = favorites.map((favorite) => favorite.produit);
   const title = dark ? "text-white" : "text-stone-900";
   const muted = dark ? "text-stone-400" : "text-stone-600";
@@ -31,6 +31,26 @@ export default function FavoritesPage({ dark, onBrowse, onReserve }: Props) {
         </p>
       </div>
 
+      {error && (
+        <div
+          role="alert"
+          className={`mb-6 flex items-center justify-between gap-4 rounded-2xl border px-5 py-4 text-sm ${
+            dark
+              ? "border-amber-400/30 bg-amber-500/10 text-amber-100"
+              : "border-amber-200 bg-amber-50 text-amber-900"
+          }`}
+        >
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="shrink-0 font-semibold underline underline-offset-4"
+          >
+            Réessayer
+          </button>
+        </div>
+      )}
+
       {isLoading ? (
         <div
           role="status"
@@ -41,24 +61,6 @@ export default function FavoritesPage({ dark, onBrowse, onReserve }: Props) {
           }`}
         >
           Chargement de vos favoris…
-        </div>
-      ) : loadError ? (
-        <div
-          role="alert"
-          className={`rounded-3xl border px-6 py-10 text-center ${
-            dark
-              ? "border-rose-400/30 bg-rose-500/10 text-rose-200"
-              : "border-rose-200 bg-rose-50 text-rose-800"
-          }`}
-        >
-          <p>Impossible de charger vos favoris : {loadError}</p>
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="mt-4 rounded-full border border-current/30 px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors hover:bg-current/5"
-          >
-            Réessayer
-          </button>
         </div>
       ) : products.length === 0 ? (
         <div
@@ -98,7 +100,6 @@ export default function FavoritesPage({ dark, onBrowse, onReserve }: Props) {
               key={product.id}
               product={product}
               dark={dark}
-              returnTab="favorites"
               onReserve={onReserve}
             />
           ))}

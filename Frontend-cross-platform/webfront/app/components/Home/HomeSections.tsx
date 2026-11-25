@@ -6,6 +6,7 @@ import Image from "next/image";
 import Band from "../Site/SiteBand";
 import { Star, ChevronRight, Sparkles, Calendar, MapPin, BadgeCheck, Megaphone, Glasses } from "lucide-react";
 import FavoriteButton from "@/app/components/Favorites/FavoriteButton";
+import { isFavoriteProductId } from "@/lib/favorites";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                              */
@@ -208,7 +209,9 @@ function Card({
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-        <FavoriteButton productId={p.id} dark={dark} returnTab="landing" />
+        {isFavoriteProductId(p.id) && (
+          <FavoriteButton productId={p.id} dark={dark} />
+        )}
         {rank && (
           <span className="absolute top-3 left-3 w-9 h-9 rounded-full bg-white text-stone-900 font-black text-sm flex items-center justify-center shadow-lg">
             {rank}

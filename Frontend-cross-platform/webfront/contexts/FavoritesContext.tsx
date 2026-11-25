@@ -8,32 +8,31 @@ import {
   useMemo,
   useState,
 } from "react";
+import { ApiError } from "@/services/api";
 import { useAuth } from "@/lib/auth-context";
 import {
-  clearPendingFavorite,
-  clearPendingFavoriteRecord,
-  FAVORITE_AUTH_REQUIRED_EVENT,
-  PENDING_FAVORITE_KEY,
-  readPendingFavorite,
-  savePendingFavorite,
-  type FavoriteReturnTab,
+  isFavoriteProductId,
+  LOCAL_FAVORITES_KEY,
 } from "@/lib/favorites";
+import { FavoriteProduct, featuresService } from "@/services/features.service";
 import {
-  FavoriteProduct,
-  featuresService,
-} from "@/services/features.service";
+  CatalogProduct,
+  productsService,
+} from "@/services/products.service";
+
+type FavoriteEntry = {
+  id: string;
+  cree_le: string;
+  produit: CatalogProduct;
+};
 
 type FavoritesContextValue = {
-  favorites: FavoriteProduct[];
+  favorites: FavoriteEntry[];
   isLoading: boolean;
   pendingProductIds: ReadonlySet<string>;
   error: string | null;
-  loadError: string | null;
   isFavorite: (productId: string) => boolean;
-  toggleFavorite: (
-    productId: string,
-    returnTab: FavoriteReturnTab,
-  ) => Promise<void>;
+  toggleFavorite: (productId: string) => Promise<void>;
   refresh: () => Promise<void>;
   clearError: () => void;
 };
@@ -55,10 +54,63 @@ async function getAllProductFavorites(): Promise<FavoriteProduct[]> {
   return favorites;
 }
 
+function readLocalFavoriteIds(): string[] {
+  const stored = window.localStorage.getItem(LOCAL_FAVORITES_KEY);
+  if (!stored) return [];
+
+  let value: unknown;
+  try {
+    value = JSON.parse(stored);
+  } catch {
+    throw new Error("La liste locale des favoris est illisible.");
+  }
+  if (!Array.isArray(value)) {
+    throw new Error("La liste locale des favoris est invalide.");
+  }
+
+  return [...new Set(value.filter(isFavoriteProductId))];
+}
+
+async function getLocalProductFavorites(
+  ids = readLocalFavoriteIds(),
+): Promise<FavoriteEntry[]> {
+  const products: CatalogProduct[] = [];
+  for (let index = 0; index < ids.length; index += 100) {
+    products.push(...(await productsService.byIds(ids.slice(index, index + 100))));
+  }
+
+  const productsById = new Map(products.map((product) => [product.id, product]));
+  const cree_le = new Date().toISOString();
+  return ids.flatMap((id) => {
+    const produit = productsById.get(id);
+    return produit ? [{ id, cree_le, produit }] : [];
+  });
+}
+
+async function getAccountProductFavorites(): Promise<FavoriteProduct[]> {
+  const favorites = await getAllProductFavorites();
+  const localIds = readLocalFavoriteIds();
+  const alreadySaved = new Set(
+    favorites.map((favorite) => favorite.produit.id),
+  );
+  const newIds = localIds.filter((id) => !alreadySaved.has(id));
+
+  await Promise.all(newIds.map((id) => featuresService.favoriteProduct(id)));
+  if (window.localStorage.getItem(LOCAL_FAVORITES_KEY) !== null) {
+    window.localStorage.removeItem(LOCAL_FAVORITES_KEY);
+  }
+
+  return newIds.length ? getAllProductFavorites() : favorites;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
     : "Une erreur est survenue lors de la mise à jour des favoris.";
+}
+
+function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
 }
 
 export function FavoritesProvider({
@@ -68,93 +120,99 @@ export function FavoritesProvider({
 }) {
   const { user, status } = useAuth();
   const currentUserId = user?.id;
-  const [favoriteData, setFavoriteData] = useState<{
+  const isAuthenticatedUser =
+    status === "authenticated" && Boolean(currentUserId);
+  const [accountFavorites, setAccountFavorites] = useState<{
     userId: string;
-    items: FavoriteProduct[];
+    items: FavoriteEntry[];
   } | null>(null);
+  const [localFavorites, setLocalFavorites] = useState<FavoriteEntry[]>([]);
+  const [localFavoritesLoaded, setLocalFavoritesLoaded] = useState(false);
+  const [localFallback, setLocalFallback] = useState(false);
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
   const [pendingProductIds, setPendingProductIds] = useState<Set<string>>(
     new Set(),
   );
   const [error, setError] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const isAuthenticatedUser = status === "authenticated" && Boolean(currentUserId);
-  const favorites = useMemo(
-    () =>
-      isAuthenticatedUser && favoriteData && favoriteData.userId === currentUserId
-        ? favoriteData.items
-        : [],
-    [currentUserId, favoriteData, isAuthenticatedUser],
-  );
+
+  const favorites = useMemo(() => {
+    if (!isAuthenticatedUser || localFallback) return localFavorites;
+    return accountFavorites && accountFavorites.userId === currentUserId
+      ? accountFavorites.items
+      : [];
+  }, [
+    accountFavorites,
+    currentUserId,
+    isAuthenticatedUser,
+    localFallback,
+    localFavorites,
+  ]);
   const isLoading =
     status === "loading" ||
+    (status === "guest" && !localFavoritesLoaded) ||
     (isAuthenticatedUser && loadedUserId !== currentUserId);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await getAllProductFavorites();
-      if (currentUserId) {
-        setFavoriteData({ userId: currentUserId, items: result });
+  const loadFavorites = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      if (isAuthenticatedUser && currentUserId) {
+        try {
+          const result = await getAccountProductFavorites();
+          if (!isCurrent()) return;
+          setAccountFavorites({ userId: currentUserId, items: result });
+          setLocalFallback(false);
+          setError(null);
+        } catch (loadError) {
+          try {
+            const result = await getLocalProductFavorites();
+            if (!isCurrent()) return;
+            setLocalFavorites(result);
+            setLocalFavoritesLoaded(true);
+            setLocalFallback(true);
+            setError(isUnauthorized(loadError) ? null : errorMessage(loadError));
+          } catch (localError) {
+            if (!isCurrent()) return;
+            setLocalFavorites([]);
+            setLocalFavoritesLoaded(true);
+            setLocalFallback(true);
+            setError(errorMessage(localError));
+          }
+        } finally {
+          if (isCurrent()) setLoadedUserId(currentUserId);
+        }
+        return;
       }
-      setError(null);
-      setLoadError(null);
-    } catch (refreshError) {
-      const message = errorMessage(refreshError);
-      setError(message);
-      setLoadError(message);
-    }
-  }, [currentUserId]);
+
+      try {
+        const result = await getLocalProductFavorites();
+        if (!isCurrent()) return;
+        setLocalFavorites(result);
+        setLocalFallback(true);
+        setError(null);
+      } catch (loadError) {
+        if (!isCurrent()) return;
+        setLocalFavorites([]);
+        setLocalFallback(true);
+        setError(errorMessage(loadError));
+      } finally {
+        if (isCurrent()) {
+          setLocalFavoritesLoaded(true);
+          setLoadedUserId(null);
+        }
+      }
+    },
+    [currentUserId, isAuthenticatedUser],
+  );
+
+  const refresh = useCallback(() => loadFavorites(), [loadFavorites]);
 
   useEffect(() => {
     if (status === "loading") return;
-    if (
-      status !== "authenticated" ||
-      !currentUserId
-    ) {
-      if (status !== "authenticated") clearPendingFavorite();
-      return;
-    }
-
     let active = true;
-    const load = async () => {
-      setError(null);
-      setLoadError(null);
-      try {
-        let pendingProductId: string | null = null;
-        try {
-          pendingProductId = readPendingFavorite();
-        } catch (readError) {
-          clearPendingFavorite();
-          setError(errorMessage(readError));
-        }
-
-        if (pendingProductId) {
-          try {
-            await featuresService.favoriteProduct(pendingProductId);
-            clearPendingFavoriteRecord();
-          } catch (favoriteError) {
-            setError(errorMessage(favoriteError));
-          }
-        }
-
-        const result = await getAllProductFavorites();
-        if (active) setFavoriteData({ userId: currentUserId, items: result });
-      } catch (loadError) {
-        if (active) {
-          const message = errorMessage(loadError);
-          setError(message);
-          setLoadError(message);
-        }
-      } finally {
-        if (active) setLoadedUserId(currentUserId);
-      }
-    };
-
-    void load();
+    void Promise.resolve().then(() => loadFavorites(() => active));
     return () => {
       active = false;
     };
-  }, [currentUserId, status]);
+  }, [loadFavorites, status]);
 
   const isFavorite = useCallback(
     (productId: string) =>
@@ -163,35 +221,61 @@ export function FavoritesProvider({
   );
 
   const toggleFavorite = useCallback(
-    async (productId: string, returnTab: FavoriteReturnTab) => {
-      if (status === "guest") {
-        try {
-          savePendingFavorite(productId, returnTab);
-          window.dispatchEvent(new Event(FAVORITE_AUTH_REQUIRED_EVENT));
-        } catch (saveError) {
-          setError(errorMessage(saveError));
-        }
-        return;
-      }
-      if (status !== "authenticated" || !user) {
-        setError("Connectez-vous pour gérer vos favoris.");
+    async (productId: string) => {
+      if (!isFavoriteProductId(productId)) {
+        setError("Un identifiant de produit valide est requis.");
         return;
       }
 
+      const wasFavorite = isFavorite(productId);
       setPendingProductIds((current) => new Set(current).add(productId));
       setError(null);
+
       try {
-        if (isFavorite(productId)) {
+        if (!isAuthenticatedUser || localFallback) {
+          const ids = readLocalFavoriteIds();
+          const nextIds = wasFavorite
+            ? ids.filter((id) => id !== productId)
+            : [...new Set([...ids, productId])];
+          window.localStorage.setItem(
+            LOCAL_FAVORITES_KEY,
+            JSON.stringify(nextIds),
+          );
+          const localProducts = await getLocalProductFavorites(nextIds);
+          setLocalFavorites(localProducts);
+          setLocalFavoritesLoaded(true);
+          setLocalFallback(true);
+          return;
+        }
+
+        if (wasFavorite) {
           await featuresService.unfavoriteProduct(productId);
         } else {
           await featuresService.favoriteProduct(productId);
         }
-        if (window.sessionStorage.getItem(PENDING_FAVORITE_KEY) === productId) {
-          clearPendingFavoriteRecord();
-        }
         await refresh();
       } catch (toggleError) {
-        setError(errorMessage(toggleError));
+        if (isUnauthorized(toggleError)) {
+          setLocalFallback(true);
+          try {
+            const ids = readLocalFavoriteIds();
+            const nextIds = wasFavorite
+              ? ids.filter((id) => id !== productId)
+              : [...new Set([...ids, productId])];
+            window.localStorage.setItem(
+              LOCAL_FAVORITES_KEY,
+              JSON.stringify(nextIds),
+            );
+            setLocalFavorites(await getLocalProductFavorites(nextIds));
+            setLocalFavoritesLoaded(true);
+            setError(null);
+          } catch (localError) {
+            setLocalFavorites([]);
+            setError(errorMessage(localError));
+          }
+        } else {
+          setError(errorMessage(toggleError));
+        }
       } finally {
         setPendingProductIds((current) => {
           const next = new Set(current);
@@ -200,35 +284,30 @@ export function FavoritesProvider({
         });
       }
     },
-    [isFavorite, refresh, status, user],
+    [isAuthenticatedUser, isFavorite, localFallback, refresh],
   );
 
-  const clearError = useCallback(() => {
-    setError(null);
-    setLoadError(null);
-  }, []);
+  const clearError = useCallback(() => setError(null), []);
   const value = useMemo(
     () => ({
       favorites,
       isLoading,
       pendingProductIds,
       error,
-      loadError,
       isFavorite,
       toggleFavorite,
       refresh,
       clearError,
     }),
     [
+      clearError,
+      error,
       favorites,
+      isFavorite,
       isLoading,
       pendingProductIds,
-      error,
-      loadError,
-      isFavorite,
-      toggleFavorite,
       refresh,
-      clearError,
+      toggleFavorite,
     ],
   );
 

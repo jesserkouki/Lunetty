@@ -1,14 +1,34 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
 export default function ClientLayout({ children }: { children: ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <main
+          className="grid min-h-[60vh] place-items-center bg-[#f5f0e7] px-5 text-sm text-stone-600 dark:bg-[#181613] dark:text-stone-300"
+          role="status"
+        >
+          Chargement de votre espace client…
+        </main>
+      }
+    >
+      <ClientLayoutGuard>{children}</ClientLayoutGuard>
+    </Suspense>
+  );
+}
+
+function ClientLayoutGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, status } = useAuth();
+  const isFavoritesPage = pathname === "/client/favorites";
 
   useEffect(() => {
+    if (isFavoritesPage) return;
     if (status === "guest") {
       const returnTo = window.location.pathname || "/client/dashboard";
       router.replace(`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`);
@@ -17,7 +37,9 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
     } else if (status === "authenticated" && user?.accountType === "OPTICIAN") {
       router.replace("/optician/dashboard");
     }
-  }, [router, status, user?.accountType, user?.role]);
+  }, [isFavoritesPage, router, status, user?.accountType, user?.role]);
+
+  if (isFavoritesPage) return children;
 
   if (
     status !== "authenticated" ||

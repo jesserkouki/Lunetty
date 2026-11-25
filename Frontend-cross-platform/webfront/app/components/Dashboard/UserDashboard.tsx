@@ -293,35 +293,7 @@ export default function UserDashboard({ user, dark, onNavigate, onSettings }: Pr
         </nav>
 
         <section aria-label="Accès rapides" className="hidden grid-cols-5 gap-4 lg:grid">
-          <motion.button
-            type="button"
-            onClick={() => onNavigate("tryon")}
-            initial={reducedMotion ? false : { opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: reducedMotion ? 0 : 0.45 }}
-            className="group relative col-span-2 flex min-h-[260px] flex-col justify-between overflow-hidden rounded-[1.75rem] bg-lunetty-ink p-7 text-left text-[#f3eee6] shadow-[0_24px_70px_rgba(26,23,19,0.18)] transition duration-500 hover:-translate-y-1 motion-safe:hover:[transform:perspective(1000px)_rotateY(-2deg)_rotateX(1deg)]"
-          >
-            <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_75%_35%,rgba(201,164,92,0.32),transparent_48%),linear-gradient(125deg,rgba(255,255,255,0.08),transparent_50%)] opacity-80 transition-opacity duration-500 group-hover:opacity-100" />
-            <motion.span
-              aria-hidden="true"
-              animate={reducedMotion ? undefined : { rotateY: [-10, 10, -10], y: [0, -6, 0] }}
-              transition={reducedMotion ? undefined : { duration: 7, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute right-8 top-8 grid h-32 w-40 place-items-center rounded-[2rem] border border-lunetty-gold/35 bg-white/[0.04] text-lunetty-gold shadow-[0_18px_50px_rgba(0,0,0,0.2)] [transform-style:preserve-3d]"
-            >
-              <Glasses className="h-20 w-20 stroke-[1.1]" />
-            </motion.span>
-            <div className="relative z-10">
-              <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-lunetty-gold">
-                <Sparkles aria-hidden="true" className="h-4 w-4" /> Votre studio
-              </span>
-              <h2 className="mt-4 max-w-sm font-serif text-3xl leading-tight sm:text-4xl">
-                Essayez une monture à votre image.
-              </h2>
-            </div>
-            <span className="relative z-10 inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-lunetty-gold px-5 text-sm font-bold text-lunetty-ink transition group-hover:bg-[#d9ba78]">
-              Essayer une monture <ArrowRight aria-hidden="true" className="h-4 w-4" />
-            </span>
-          </motion.button>
+
           {actions.map(({ key, icon: Icon, label, hint }, index) => (
             <motion.button
               key={key}
@@ -577,7 +549,7 @@ export default function UserDashboard({ user, dark, onNavigate, onSettings }: Pr
           ) : favorites.length ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {favorites.slice(0, 4).map(({ produit }) => (
-                <CatalogProductCard key={produit.id} product={produit} dark={dark} returnTab="landing" />
+                <CatalogProductCard key={produit.id} product={produit} dark={dark} />
               ))}
             </div>
           ) : (

@@ -22,6 +22,10 @@ export const productsService = {
     apiRequest<Page<CatalogProduct>>(
       `products${queryString({ page, limit, q, type })}`,
     ),
+  byIds: (ids: string[]) =>
+    apiRequest<CatalogProduct[]>(
+      `products/by-ids${queryString({ ids: ids.join(",") })}`,
+    ),
   find: (id: string) => apiRequest<JsonRecord>(`products/${id}`),
   variants: (id: string) => apiRequest<JsonRecord[]>(`products/${id}/variants`),
 };

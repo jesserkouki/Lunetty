@@ -81,6 +81,27 @@ export class ProductsService {
     );
   }
 
+  async findPublicByIds(ids: string[]) {
+    const products = await this.prisma.produit.findMany({
+      where: {
+        id: { in: [...new Set(ids)] },
+        statut: StatutProduit.ACTIVE,
+        supprime_le: null,
+      },
+      select: productListSelect,
+    });
+    const productsById = new Map(
+      products.map((product) => [
+        product.id,
+        { ...product, ...toProductCard(product) },
+      ]),
+    );
+    return [...new Set(ids)].flatMap((id) => {
+      const product = productsById.get(id);
+      return product ? [product] : [];
+    });
+  }
+
   async findPublic(id: string) {
     return this.cache.getItem(id, async () => {
       const product = await this.prisma.produit.findFirst({
