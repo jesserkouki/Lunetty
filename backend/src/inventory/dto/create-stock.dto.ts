@@ -1,4 +1,3 @@
-
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   AgeMontureStock,
@@ -22,17 +21,47 @@ import {
 export class CreateStockDto {
   @ApiPropertyOptional({
     format: 'uuid',
+    description: 'Optional direct link to a shared catalogue product',
+  })
+  @IsOptional()
+  @IsUUID()
+  catalogueProductId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Optional direct link to a shared catalogue variant',
+  })
+  @IsOptional()
+  @IsUUID()
+  catalogueVariantId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Verified catalogue image selected for this frame',
+  })
+  @IsOptional()
+  @IsUUID()
+  catalogueImageId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Idempotency key reused for retries of this stock creation',
+  })
+  @IsOptional()
+  @IsUUID()
+  creationRequestId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
     description: 'Lien facultatif avec une variante du catalogue',
   })
   @IsOptional()
   @IsUUID()
   storeListingVariantId?: string;
 
-
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   emplacement_id!: string;
-
 
   @ApiProperty({ enum: TypeArticleStock })
   @IsEnum(TypeArticleStock)

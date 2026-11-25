@@ -44,10 +44,12 @@ function SignInContent() {
     );
     window.sessionStorage.removeItem('lunetty.auth.redirect');
     router.replace(
-      savedRedirect ??
-        (accountType === 'OPTICIAN'
-          ? '/optician/dashboard'
-          : '/'),
+      user.role === 'SUPER_ADMIN'
+        ? '/admin'
+        : savedRedirect ??
+          (accountType === 'OPTICIAN'
+            ? '/optician/dashboard'
+            : '/'),
     );
   };
 

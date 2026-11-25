@@ -126,7 +126,6 @@ export class StoreListingsService {
 
   async create(userId: string, storeId: string, input: CreateStoreListingDto) {
     await this.authorize(userId, storeId);
-    await this.storeAuthorization.assertStoreLimit(storeId, 'listings');
     const product = await this.prisma.produit.findFirst({
       where: { id: input.produit_id, statut: StatutProduit.ACTIVE, supprime_le: null },
       select: { id: true },
@@ -409,23 +408,9 @@ export class StoreListingsService {
   private async requireActiveStore(storeId: string) {
     const store = await this.prisma.magasin.findFirst({
       where: { id: storeId, statut: StatutMagasin.ACTIVE, supprime_le: null },
-      select: {
-        id: true,
-        plateforme_abonnement: {
-          select: { plan: { select: { actif: true, modules: true } } },
-        },
-      },
+      select: { id: true },
     });
     if (!store) throw new NotFoundException('Active store not found');
-    const plan = store.plateforme_abonnement?.plan;
-    if (
-      plan &&
-      (!plan.actif ||
-        !Array.isArray(plan.modules) ||
-        !plan.modules.includes('shop'))
-    ) {
-      throw new NotFoundException('Active store not found');
-    }
   }
 
   private authorize(userId: string, storeId: string) {

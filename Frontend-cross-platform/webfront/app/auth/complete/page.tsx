@@ -21,10 +21,12 @@ export default function AuthCompletePage() {
     );
     window.sessionStorage.removeItem('lunetty.auth.redirect');
     router.replace(
-      savedRedirect ??
-        (user.accountType === 'OPTICIAN'
-          ? '/optician/dashboard'
-          : '/'),
+      user.role === 'SUPER_ADMIN'
+        ? '/admin'
+        : savedRedirect ??
+          (user.accountType === 'OPTICIAN'
+            ? '/optician/dashboard'
+            : '/'),
     );
   }, [loading, router, status, user]);
 

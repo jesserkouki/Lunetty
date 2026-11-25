@@ -136,12 +136,92 @@ and store listings/prices are pending.
 
 remain pending.
 
+### Shared eyewear catalogue
+
+The shared catalogue is separate from product listings and shop inventory. It
+stores product identity, colour variants, and image metadata only; it has no
+shop-specific prices or stock quantities.
+
+- `POST|GET /api/v1/admin/catalogue/products` — create or paginate shared
+  products; optional `q`, `productType`, `isActive`, `page`, and `limit`.
+- `GET /api/v1/admin/catalogue/summary` — return product, variant, verified
+  image, image-coverage, and active/archive totals for the dashboard.
+- `GET|PATCH|DELETE /api/v1/admin/catalogue/products/:id` — retrieve, update,
+  or delete a product. Creation and updates normalize brand/reference identity;
+  duplicates return `409`.
+- `POST /api/v1/admin/catalogue/products/:id/variants` and
+  `PATCH|DELETE /api/v1/admin/catalogue/products/:id/variants/:variantId` —
+  manage colour variants and optional EANs.
+- `POST /api/v1/admin/catalogue/products/:id/images`,
+  `PATCH|DELETE /api/v1/admin/catalogue/images/:id` — manage image URL/storage
+  metadata, source/licensing, primary designation, and verification.
+  The existing model supports verified/unverified states only; it has no
+  separate rejected state or binary-upload endpoint.
+- `GET /api/v1/products/image-suggestions` — authenticated shop staff image
+  search. Supply `storeId` and one or more of `brand`, `reference`, `color`, or
+  `model`, or `ean`; the user must have active membership and `inventory.create`
+  permission in that shop. Only verified frame images are returned, archived
+  variants are excluded, variant-scoped images are never mixed across colours,
+  and only the single best verified image is returned.
+- `GET /api/v1/products/image-suggestions/external` — authenticated automatic
+  free-search fallback using the same search criteria and shop permission.
+  Requests are limited to 10 per minute per client. Openverse is queried with
+  its commercial-use filter; Brave image search is also queried when
+  `BRAVE_API_KEY` is configured. Each provider is limited to 8 upstream
+  results, and the combined response is deduplicated and limited to 8. The
+  response contains `providers`, partial-provider `warnings`, and `data`.
+  Results retain provider, original image URL, source page/domain, and any
+  available attribution/license metadata. `matchSignal` reports only text
+  clues such as `BRAND_REFERENCE_TEXT_MATCH` or `SEARCH_CANDIDATE`; it never
+  asserts an exact SKU match. Brave results do not include a commercial-use
+  license assertion.
+- `GET /api/v1/products/image-suggestions/paid` — authenticated SerpApi Google
+  Images search. This endpoint is called only after an explicit user action
+  and is limited to 3 requests per minute per client. It requires the
+  backend-only `SERPAPI_API_KEY`; identical searches are cached for five
+  minutes. For example, an optician explicitly clicks “Search other images”
+  to request
+  `GET /api/v1/products/image-suggestions/paid?storeId=<uuid>&brand=Ray-Ban&reference=RB5228&color=black`.
+  SerpApi currently lists a 250-search free monthly tier, after which paid
+  plans apply. Brave usage is subject to its account credit/pricing terms;
+  automatic use should be enabled only with an account budget reviewed.
+
+Copy `backend/.env.example` to a local backend environment file and set
+`BRAVE_API_KEY` and/or `SERPAPI_API_KEY` there. Both are optional at runtime.
+Never add provider keys to frontend configuration, Docker environment values,
+or API responses. Providers use fixed HTTPS endpoints, strict Brave SafeSearch,
+6-second request timeouts, an upstream response-size limit, a result cap,
+throttling, and a five-minute in-memory result cache. External URLs are HTTPS
+only, and no server-side image URL fetching or scraping is performed.
+
+Catalogue administration requires the platform `ADMIN` or `SUPER_ADMIN` role.
+Suggestions use exact brand/reference/colour, EAN, exact brand/reference,
+normalized identity, and finally approximate matching, in that priority order.
+Approximate results are labeled `APPROXIMATE`; they are not reported as exact.
+External images are preview-only: stock creation does not persist their URL,
+provider, or attribution. The optician must explicitly confirm that the stock
+will be created without an image. Manual stock-image upload is not available:
+existing upload endpoints are specific to reference scanning, store branding,
+avatars, or private prescriptions and are not a safe stock-image store.
+External results are never added to or marked verified in the shared
+catalogue. A future migration would need a stock-image relation containing
+stock ID, image kind/source, optional catalogue image ID or storage key,
+external image/source URLs, provider, license and attribution metadata, plus
+ownership constraints. The migration is deliberately deferred.
+
 
 ### Inventory
 
 - `GET|POST /api/v1/stores/:storeId/inventory` — store-scoped inventory.
 - `GET|PATCH /api/v1/stores/:storeId/inventory/:stockId` — read a stock record
   or update its reorder threshold; stock quantity changes require a movement.
+- Stock create/update DTOs accept optional `catalogueProductId` and
+  `catalogueVariantId` links. A variant must belong to the referenced or inferred
+  catalogue product. Existing records without these links remain valid.
+- Frame stock creation may also include a `catalogueImageId`; the API verifies
+  that it is verified and belongs to the active selected product and variant.
+  The current stock model does not persist that image ID or its URL.
+  `creationRequestId` is a UUID idempotency key and should be reused for retries.
 - `GET|POST /api/v1/stores/:storeId/inventory/:stockId/movements` — immutable
   movement history and transactional operations.
 - Supported movement operations: receipt, sale, return, signed adjustment,

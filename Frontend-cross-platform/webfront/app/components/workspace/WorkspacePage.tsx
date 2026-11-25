@@ -11,6 +11,7 @@ import { addressesService } from "../../../services/addresses.service";
 import { clientsService } from "../../../services/clients.service";
 import { featuresService } from "../../../services/features.service";
 import { inventoryService } from "../../../services/inventory.service";
+import { catalogueService } from "../../../services/catalogue.service";
 import { opticiansService } from "../../../services/opticians.service";
 import { ordersService } from "../../../services/orders.service";
 import { productsService } from "../../../services/products.service";
@@ -1106,6 +1107,15 @@ export function WorkspacePage({
             }
             onCreateStock={(input) =>
               run(() => inventoryService.create(auth.storeId, input), "Article ajouté à l'inventaire.")
+            }
+            onSearchCatalogue={(search) =>
+              catalogueService.imageSuggestions(auth.storeId, search)
+            }
+            onSearchExternalCatalogue={(search) =>
+              catalogueService.externalImageSuggestions(auth.storeId, search)
+            }
+            onSearchPaidCatalogue={(search) =>
+              catalogueService.paidExternalImageSuggestions(auth.storeId, search)
             }
             onScanReference={(image) =>
               inventoryService.scanReference(auth.storeId, image)

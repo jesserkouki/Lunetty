@@ -16,10 +16,16 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { RolePlateforme } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuthenticatedRequest } from '../auth/auth.types';
+import { ExternalImageSearchService } from '../catalogue/external-image-search.service';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PlatformRoles } from '../common/decorators/platform-roles.decorator';
 import { PlatformRolesGuard } from '../common/guards/platform-roles.guard';
+import { ProductImageSearchService } from '../catalogue/product-image-search.service';
+import { ProductImageSuggestionsDto } from '../catalogue/dto/product-image-suggestions.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
@@ -29,7 +35,54 @@ import { ProductsService } from './products.service';
 @Controller('products')
 @ApiTags('Products')
 export class ProductsController {
-  constructor(private readonly products: ProductsService) {}
+  constructor(
+    private readonly products: ProductsService,
+    private readonly imageSearch: ProductImageSearchService,
+    private readonly externalImageSearch: ExternalImageSearchService,
+  ) {}
+
+  @Get('image-suggestions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Suggest verified shared catalogue images for an authorized shop',
+  })
+  imageSuggestions(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Query() query: ProductImageSuggestionsDto,
+  ) {
+    return this.imageSearch.suggestions(user.id, query);
+  }
+
+  @Get('image-suggestions/external')
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Search commercial-use external image candidates for an authorized shop',
+  })
+  externalImageSuggestions(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Query() query: ProductImageSuggestionsDto,
+  ) {
+    return this.externalImageSearch.freeSuggestions(user.id, query);
+  }
+
+  @Get('image-suggestions/paid')
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Explicitly search SerpApi for unverified image candidates for an authorized shop',
+  })
+  paidExternalImageSuggestions(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Query() query: ProductImageSuggestionsDto,
+  ) {
+    return this.externalImageSearch.paidSuggestions(user.id, query);
+  }
 
   @Get()
   @ApiOperation({ summary: 'Search the active product catalog' })
@@ -38,7 +91,9 @@ export class ProductsController {
   }
 
   @Get(':productId')
-  @ApiOperation({ summary: 'Get an active product with variants and specifications' })
+  @ApiOperation({
+    summary: 'Get an active product with variants and specifications',
+  })
   @ApiParam({ name: 'productId', format: 'uuid' })
   find(@Param('productId', ParseUUIDPipe) productId: string) {
     return this.products.findPublic(productId);

@@ -526,7 +526,6 @@ export class StoresService {
         'Temporary password must be at least 12 characters',
       );
     }
-    await this.storeAuthorization.assertStoreLimit(storeId, 'employees');
     const passwordHash = await this.passwordHasher.hash(
       temporaryPassword,
     );

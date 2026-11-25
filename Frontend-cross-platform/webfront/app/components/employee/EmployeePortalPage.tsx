@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { backofficeService } from "../../../services/backoffice.service";
+import { catalogueService } from "../../../services/catalogue.service";
 import {
   employeeService,
   type EmployeeStore,
@@ -15,6 +16,7 @@ import { usersService } from "../../../services/users.service";
 import { useAuth } from "../../../contexts/AuthContext";
 import { AppShell } from "../layout/AppShell";
 import { DataView, Notice, Panel } from "../ui/DataView";
+import { OpticianInventory } from "../optician/OpticianInventory";
 
 type EmployeeSection = "dashboard" | "inventory" | "orders" | "customers" | "activity" | "profile";
 type DataRecord = Record<string, unknown>;
@@ -126,7 +128,14 @@ export function EmployeePortalPage({ section }: { section: string }) {
                 if (!hasFinanceAccess) result = withoutFinancialData(result);
                 break;
               case "inventory":
-                result = await inventoryService.list(selectedStoreId);
+                {
+                  const [inventory, locations, locationTypes] = await Promise.all([
+                    inventoryService.list(selectedStoreId),
+                    storesService.locations(selectedStoreId),
+                    storesService.locationTypes(selectedStoreId),
+                  ]);
+                  result = { inventory, locations, locationTypes };
+                }
                 break;
               case "orders":
                 result = await backofficeService.orders(selectedStoreId);
@@ -164,6 +173,10 @@ export function EmployeePortalPage({ section }: { section: string }) {
 
   const currentSection = section as EmployeeSection;
   const title = hasAccess ? sectionLabels[currentSection] : "Accès indisponible";
+  const inventoryRecord =
+    record.value && typeof record.value === "object"
+      ? record.value as DataRecord
+      : {};
 
   if (authLoading || !user || loadingStores) {
     return <main className="center-page"><p>Chargement de votre espace employé…</p></main>;
@@ -215,7 +228,63 @@ export function EmployeePortalPage({ section }: { section: string }) {
               ? "Événements attribués à votre compte dans la boutique active."
               : "Données chargées depuis l’API de la boutique active."}
           >
-            {loading ? <p className="muted" role="status">Chargement…</p> : <DataView value={record.value} />}
+            {loading ? <p className="muted" role="status">Chargement…</p> : section === "inventory" ? (
+              <OpticianInventory
+                key={selectedStoreId}
+                inventoryData={inventoryRecord.inventory}
+                locationsData={inventoryRecord.locations}
+                locationTypesData={inventoryRecord.locationTypes}
+                canCreateStock={grantedPermissions.includes("inventory.create")}
+                readOnly
+                onApplyMovement={async (stockId, input) => {
+                  await inventoryService.createMovement(selectedStoreId ?? "", stockId, input);
+                  setRefreshIndex((value) => value + 1);
+                }}
+                onUpdateThreshold={async (stockId, seuil) => {
+                  await inventoryService.update(selectedStoreId ?? "", stockId, {
+                    seuil_reapprovisionnement: seuil,
+                  });
+                  setRefreshIndex((value) => value + 1);
+                }}
+                onCreateStock={async (input) => {
+                  await inventoryService.create(selectedStoreId ?? "", input);
+                  setRefreshIndex((value) => value + 1);
+                }}
+                onSearchCatalogue={(search) =>
+                  catalogueService.imageSuggestions(selectedStoreId ?? "", search)
+                }
+                onSearchExternalCatalogue={(search) =>
+                  catalogueService.externalImageSuggestions(
+                    selectedStoreId ?? "",
+                    search,
+                  )
+                }
+                onSearchPaidCatalogue={(search) =>
+                  catalogueService.paidExternalImageSuggestions(
+                    selectedStoreId ?? "",
+                    search,
+                  )
+                }
+                onScanReference={(image) =>
+                  inventoryService.scanReference(selectedStoreId ?? "", image)
+                }
+                onCreateLocation={(input) =>
+                  storesService.createLocation(selectedStoreId ?? "", input)
+                }
+                onUpdateLocation={(locationId, input) =>
+                  storesService.updateLocation(selectedStoreId ?? "", locationId, input)
+                }
+                onCreateLocationType={(input) =>
+                  storesService.createLocationType(selectedStoreId ?? "", input)
+                }
+                onUpdateLocationType={(typeId, input) =>
+                  storesService.updateLocationType(selectedStoreId ?? "", typeId, input)
+                }
+                onLoadMovements={(stockId) =>
+                  inventoryService.movements(selectedStoreId ?? "", stockId)
+                }
+              />
+            ) : <DataView value={record.value} />}
           </Panel>
           <Panel title="Autorisations effectives">
             <p className="muted">Les actions disponibles dans ce portail sont limitées aux autorisations renvoyées par l’API. L’API reste la frontière de sécurité.</p>

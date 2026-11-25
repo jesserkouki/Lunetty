@@ -267,7 +267,6 @@ enum StatutAvis {
   @@map("ReviewStatus")
 }
 
-
 enum VisibilitePublication {
   PUBLIC
   ABONNES         @map("FOLLOWERS")
@@ -383,8 +382,9 @@ model Utilisateur {
   annonces_creees                 AnnonceMagasin[]           @relation("CreateurAnnonce")
   plateforme_abonnement           AttributionPlanPlateforme? @relation("UtilisateurPlan")
   utilisations_ia                 UtilisationIA[]
-  campagnes_publicitaires       CampagnePublicitaire[] @relation("AuteurCampagnePublicitaire")
-  publicites_creees              PublicitePlateforme[] @relation("AuteurPublicitePlateforme")
+  campagnes_publicitaires         CampagnePublicitaire[]     @relation("AuteurCampagnePublicitaire")
+  publicites_creees               PublicitePlateforme[]      @relation("AuteurPublicitePlateforme")
+  images_catalogue_verifiees      CatalogueProductImage[]    @relation("CatalogueImageVerifier")
 
   @@index([statut, supprime_le])
   @@map("utilisateurs")
@@ -684,29 +684,36 @@ model VarianteAnnonceMagasin {
 }
 
 model Stock {
-  id                        String                  @id @default(uuid()) @db.Uuid
-  storeListingVariantId     String?                 @map("store_listing_variant_id") @db.Uuid
-  emplacement_id            String                  @map("location_id") @db.Uuid
-  type_article              TypeArticleStock?       @map("item_type")
-  conception_verre          ConceptionVerreStock?   @map("lens_design")
-  traitement_verre          TraitementVerreStock?   @map("lens_treatment")
-  puissance_droite          Decimal?                @map("right_power") @db.Decimal(5, 2)
-  puissance_gauche          Decimal?                @map("left_power") @db.Decimal(5, 2)
-  marque_reference          String?                 @map("brand_reference") @db.VarChar(160)
-  age_monture               AgeMontureStock?        @map("frame_age_group")
-  public_cible              PublicCible?            @map("target_audience")
-  taille_monture            String?                 @map("frame_size") @db.VarChar(60)
-  quantite_disponible       Int                     @default(0) @map("quantity_on_hand")
-  quantite_reservee         Int                     @default(0) @map("quantity_reserved")
-  seuil_reapprovisionnement Int                     @default(0) @map("reorder_level")
-  cree_le                   DateTime                @default(now()) @db.Timestamptz(6)
-  modifie_le                DateTime                @updatedAt @db.Timestamptz(6)
-  variante_annonce          VarianteAnnonceMagasin? @relation(fields: [storeListingVariantId], references: [id], onDelete: Cascade)
-  location                  EmplacementMagasin      @relation(fields: [emplacement_id], references: [id], onDelete: Restrict)
+  id                        String                   @id @default(uuid()) @db.Uuid
+  creationRequestId         String?                 @unique @map("creation_request_id") @db.Uuid
+  storeListingVariantId     String?                  @map("store_listing_variant_id") @db.Uuid
+  catalogueProductId        String?                  @map("catalogue_product_id") @db.Uuid
+  catalogueVariantId        String?                  @map("catalogue_variant_id") @db.Uuid
+  emplacement_id            String                   @map("location_id") @db.Uuid
+  type_article              TypeArticleStock?        @map("item_type")
+  conception_verre          ConceptionVerreStock?    @map("lens_design")
+  traitement_verre          TraitementVerreStock?    @map("lens_treatment")
+  puissance_droite          Decimal?                 @map("right_power") @db.Decimal(5, 2)
+  puissance_gauche          Decimal?                 @map("left_power") @db.Decimal(5, 2)
+  marque_reference          String?                  @map("brand_reference") @db.VarChar(160)
+  age_monture               AgeMontureStock?         @map("frame_age_group")
+  public_cible              PublicCible?             @map("target_audience")
+  taille_monture            String?                  @map("frame_size") @db.VarChar(60)
+  quantite_disponible       Int                      @default(0) @map("quantity_on_hand")
+  quantite_reservee         Int                      @default(0) @map("quantity_reserved")
+  seuil_reapprovisionnement Int                      @default(0) @map("reorder_level")
+  cree_le                   DateTime                 @default(now()) @db.Timestamptz(6)
+  modifie_le                DateTime                 @updatedAt @db.Timestamptz(6)
+  variante_annonce          VarianteAnnonceMagasin?  @relation(fields: [storeListingVariantId], references: [id], onDelete: Cascade)
+  catalogueProduct          CatalogueProduct?        @relation(fields: [catalogueProductId], references: [id], onDelete: SetNull)
+  catalogueVariant          CatalogueProductVariant? @relation(fields: [catalogueVariantId], references: [id], onDelete: SetNull)
+  location                  EmplacementMagasin       @relation(fields: [emplacement_id], references: [id], onDelete: Restrict)
   mouvements                MouvementStock[]
 
   @@unique([storeListingVariantId, emplacement_id])
   @@index([emplacement_id, type_article])
+  @@index([catalogueProductId])
+  @@index([catalogueVariantId])
   @@map("stocks")
 }
 
@@ -1284,55 +1291,55 @@ model ClicMagasin {
 }
 
 model ParametresPlateforme {
-  id                         String   @id @default("global") @db.VarChar(20)
-  inscriptions_magasins      Boolean  @default(true) @map("store_registrations_enabled")
-  publicites_activees        Boolean  @default(true) @map("advertisements_enabled")
-  modifie_par_id             String?  @map("updated_by_id") @db.Uuid
-  cree_le                    DateTime @default(now()) @db.Timestamptz(6)
-  modifie_le                 DateTime @updatedAt @db.Timestamptz(6)
+  id                    String   @id @default("global") @db.VarChar(20)
+  inscriptions_magasins Boolean  @default(true) @map("store_registrations_enabled")
+  publicites_activees   Boolean  @default(true) @map("advertisements_enabled")
+  modifie_par_id        String?  @map("updated_by_id") @db.Uuid
+  cree_le               DateTime @default(now()) @db.Timestamptz(6)
+  modifie_le            DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("parametres_plateforme")
 }
 
 model CampagnePublicitaire {
-  id                String               @id @default(uuid()) @db.Uuid
-  nom               String               @db.VarChar(160)
-  statut            String               @default("DRAFT") @db.VarChar(20)
-  public_cible      String?              @map("target_audience") @db.VarChar(80)
-  lieu_cible        String?              @map("target_location") @db.VarChar(160)
-  date_debut        DateTime?            @map("starts_at") @db.Timestamptz(6)
-  date_fin          DateTime?            @map("ends_at") @db.Timestamptz(6)
-  budget            Decimal?             @db.Decimal(12, 3)
-  notes_internes    String?              @map("internal_notes") @db.Text
-  cree_par_id       String?              @map("created_by_id") @db.Uuid
-  cree_le           DateTime             @default(now()) @db.Timestamptz(6)
-  modifie_le        DateTime             @updatedAt @db.Timestamptz(6)
-  cree_par          Utilisateur?         @relation("AuteurCampagnePublicitaire", fields: [cree_par_id], references: [id], onDelete: SetNull)
-  publicites        PublicitePlateforme[]
+  id             String                @id @default(uuid()) @db.Uuid
+  nom            String                @db.VarChar(160)
+  statut         String                @default("DRAFT") @db.VarChar(20)
+  public_cible   String?               @map("target_audience") @db.VarChar(80)
+  lieu_cible     String?               @map("target_location") @db.VarChar(160)
+  date_debut     DateTime?             @map("starts_at") @db.Timestamptz(6)
+  date_fin       DateTime?             @map("ends_at") @db.Timestamptz(6)
+  budget         Decimal?              @db.Decimal(12, 3)
+  notes_internes String?               @map("internal_notes") @db.Text
+  cree_par_id    String?               @map("created_by_id") @db.Uuid
+  cree_le        DateTime              @default(now()) @db.Timestamptz(6)
+  modifie_le     DateTime              @updatedAt @db.Timestamptz(6)
+  cree_par       Utilisateur?          @relation("AuteurCampagnePublicitaire", fields: [cree_par_id], references: [id], onDelete: SetNull)
+  publicites     PublicitePlateforme[]
 
   @@index([statut, date_debut, date_fin])
   @@map("campagnes_publicitaires")
 }
 
 model PublicitePlateforme {
-  id                String                    @id @default(uuid()) @db.Uuid
-  campagne_id       String?                   @db.Uuid
-  titre             String                    @db.VarChar(160)
-  description       String?                   @db.Text
-  url_image         String?                   @map("image_url") @db.VarChar(2048)
-  url_destination   String                    @map("destination_url") @db.VarChar(2048)
-  annonceur         String                    @db.VarChar(160)
-  type              String                    @db.VarChar(40)
-  statut            String                    @default("DRAFT") @db.VarChar(20)
-  date_debut        DateTime?                 @map("starts_at") @db.Timestamptz(6)
-  date_fin          DateTime?                 @map("ends_at") @db.Timestamptz(6)
-  notes_internes    String?                   @map("internal_notes") @db.Text
-  cree_par_id       String?                   @map("created_by_id") @db.Uuid
-  cree_le           DateTime                  @default(now()) @db.Timestamptz(6)
-  modifie_le        DateTime                  @updatedAt @db.Timestamptz(6)
-  campagne          CampagnePublicitaire?     @relation(fields: [campagne_id], references: [id], onDelete: SetNull)
-  cree_par          Utilisateur?              @relation("AuteurPublicitePlateforme", fields: [cree_par_id], references: [id], onDelete: SetNull)
-  evenements        EvenementPublicite[]
+  id              String                @id @default(uuid()) @db.Uuid
+  campagne_id     String?               @db.Uuid
+  titre           String                @db.VarChar(160)
+  description     String?               @db.Text
+  url_image       String?               @map("image_url") @db.VarChar(2048)
+  url_destination String                @map("destination_url") @db.VarChar(2048)
+  annonceur       String                @db.VarChar(160)
+  type            String                @db.VarChar(40)
+  statut          String                @default("DRAFT") @db.VarChar(20)
+  date_debut      DateTime?             @map("starts_at") @db.Timestamptz(6)
+  date_fin        DateTime?             @map("ends_at") @db.Timestamptz(6)
+  notes_internes  String?               @map("internal_notes") @db.Text
+  cree_par_id     String?               @map("created_by_id") @db.Uuid
+  cree_le         DateTime              @default(now()) @db.Timestamptz(6)
+  modifie_le      DateTime              @updatedAt @db.Timestamptz(6)
+  campagne        CampagnePublicitaire? @relation(fields: [campagne_id], references: [id], onDelete: SetNull)
+  cree_par        Utilisateur?          @relation("AuteurPublicitePlateforme", fields: [cree_par_id], references: [id], onDelete: SetNull)
+  evenements      EvenementPublicite[]
 
   @@index([statut, date_debut, date_fin])
   @@index([campagne_id])
@@ -1340,12 +1347,77 @@ model PublicitePlateforme {
 }
 
 model EvenementPublicite {
-  id            String             @id @default(uuid()) @db.Uuid
-  publicite_id  String             @db.Uuid
-  type          String             @db.VarChar(20)
-  cree_le       DateTime           @default(now()) @db.Timestamptz(6)
-  publicite     PublicitePlateforme @relation(fields: [publicite_id], references: [id], onDelete: Restrict)
+  id           String              @id @default(uuid()) @db.Uuid
+  publicite_id String              @db.Uuid
+  type         String              @db.VarChar(20)
+  cree_le      DateTime            @default(now()) @db.Timestamptz(6)
+  publicite    PublicitePlateforme @relation(fields: [publicite_id], references: [id], onDelete: Restrict)
 
   @@index([publicite_id, type, cree_le])
   @@map("evenements_publicites")
+}
+
+model CatalogueProduct {
+  id                  String                    @id @default(uuid()) @db.Uuid
+  brand               String                    @db.VarChar(120)
+  normalizedBrand     String                    @map("normalized_brand") @db.VarChar(120)
+  reference           String                    @db.VarChar(160)
+  normalizedReference String                    @map("normalized_reference") @db.VarChar(160)
+  model               String?                   @db.VarChar(160)
+  productType         TypeProduit               @map("product_type")
+  isActive            Boolean                   @default(true) @map("is_active")
+  createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  variants            CatalogueProductVariant[]
+  images              CatalogueProductImage[]
+  stockRecords        Stock[]
+
+  @@unique([normalizedBrand, normalizedReference])
+  @@index([brand, reference])
+  @@index([normalizedBrand, normalizedReference, isActive])
+  @@index([productType, isActive])
+  @@map("catalogue_products")
+}
+
+model CatalogueProductVariant {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  catalogueProductId String                  @map("catalogue_product_id") @db.Uuid
+  colorCode          String?                 @map("color_code") @db.VarChar(60)
+  colorName          String?                 @map("color_name") @db.VarChar(100)
+  ean                String?                 @unique @db.VarChar(14)
+  isActive           Boolean                 @default(true) @map("is_active")
+  deletedAt          DateTime?               @map("deleted_at") @db.Timestamptz(6)
+  createdAt          DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  product            CatalogueProduct        @relation(fields: [catalogueProductId], references: [id], onDelete: Cascade)
+  images             CatalogueProductImage[]
+  stockRecords       Stock[]
+
+  @@unique([catalogueProductId, colorCode])
+  @@index([catalogueProductId, colorName])
+  @@index([catalogueProductId, isActive, deletedAt])
+  @@map("catalogue_product_variants")
+}
+
+model CatalogueProductImage {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  catalogueProductId String                   @map("catalogue_product_id") @db.Uuid
+  variantId          String?                  @map("variant_id") @db.Uuid
+  imageUrl           String                   @map("image_url") @db.VarChar(2048)
+  storageKey         String?                  @map("storage_key") @db.VarChar(1024)
+  imageSource        String                   @map("image_source") @db.VarChar(40)
+  sourceUrl          String?                  @map("source_url") @db.VarChar(2048)
+  licenseInformation String?                  @map("license_information") @db.Text
+  isVerified         Boolean                  @default(false) @map("is_verified")
+  isPrimary          Boolean                  @default(false) @map("is_primary")
+  verifiedById       String?                  @map("verified_by_id") @db.Uuid
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  product            CatalogueProduct         @relation(fields: [catalogueProductId], references: [id], onDelete: Cascade)
+  variant            CatalogueProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  verifiedBy         Utilisateur?             @relation("CatalogueImageVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@index([catalogueProductId, isVerified, isPrimary])
+  @@index([variantId, isVerified])
+  @@map("catalogue_product_images")
 }

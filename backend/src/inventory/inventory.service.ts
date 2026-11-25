@@ -10,6 +10,7 @@ import {
   TraitementVerreStock,
   TypeMouvementStock,
   TypeArticleStock,
+  TypeProduit,
 } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -23,6 +24,8 @@ import { UpdateStockDto } from './dto/update-stock.dto';
 const stockSelect = {
   id: true,
   storeListingVariantId: true,
+  catalogueProductId: true,
+  catalogueVariantId: true,
   emplacement_id: true,
   age_monture: true,
   type_article: true,
@@ -105,37 +108,150 @@ export class InventoryService {
   async create(userId: string, storeId: string, input: CreateStockDto) {
     await this.authorize(userId, storeId, 'inventory.create');
     validateStockItem(input);
-    const [listingVariant, location] = await Promise.all([
-      input.storeListingVariantId
-        ? this.prisma.varianteAnnonceMagasin.findFirst({
-            where: {
-              id: input.storeListingVariantId,
-              annonce: { magasin_id: storeId, supprime_le: null },
-            },
-            select: { id: true },
-          })
-        : Promise.resolve(null),
-      this.prisma.emplacementMagasin.findFirst({
-        where: {
-          id: input.emplacement_id,
-          magasin_id: storeId,
-          est_actif: true,
-        },
-        select: { id: true },
-      }),
-    ]);
+    if (
+      input.type_article !== TypeArticleStock.MONTURE &&
+      (input.catalogueProductId ||
+        input.catalogueVariantId ||
+        input.catalogueImageId)
+    ) {
+      throw new BadRequestException(
+        'Catalogue image selection is only available for frames.',
+      );
+    }
+
+    if (input.creationRequestId) {
+      const existing = await this.findCreatedRequest(
+        storeId,
+        input.creationRequestId,
+      );
+      if (existing) return existing;
+    }
+
+    const hasCatalogueSelection = Boolean(
+      input.catalogueProductId ||
+        input.catalogueVariantId ||
+        input.catalogueImageId,
+    );
+    if (
+      hasCatalogueSelection &&
+      (!input.catalogueProductId || !input.catalogueImageId)
+    ) {
+      throw new BadRequestException(
+        'A catalogue product and verified image are required for image selection.',
+      );
+    }
+
+    const [listingVariant, location, catalogueProduct, catalogueVariant] =
+      await Promise.all([
+        input.storeListingVariantId
+          ? this.prisma.varianteAnnonceMagasin.findFirst({
+              where: {
+                id: input.storeListingVariantId,
+                annonce: { magasin_id: storeId, supprime_le: null },
+              },
+              select: { id: true },
+            })
+          : Promise.resolve(null),
+        this.prisma.emplacementMagasin.findFirst({
+          where: {
+            id: input.emplacement_id,
+            magasin_id: storeId,
+            est_actif: true,
+          },
+          select: { id: true },
+        }),
+        input.catalogueProductId
+          ? this.prisma.catalogueProduct.findFirst({
+              where: {
+                id: input.catalogueProductId,
+                isActive: true,
+                productType: TypeProduit.MONTURE,
+              },
+              select: { id: true },
+            })
+          : Promise.resolve(null),
+        input.catalogueVariantId
+          ? this.prisma.catalogueProductVariant.findFirst({
+              where: {
+                id: input.catalogueVariantId,
+                isActive: true,
+                deletedAt: null,
+                product: {
+                  is: {
+                    isActive: true,
+                    productType: TypeProduit.MONTURE,
+                  },
+                },
+              },
+              select: { id: true, catalogueProductId: true },
+            })
+          : Promise.resolve(null),
+      ]);
     if ((input.storeListingVariantId && !listingVariant) || !location) {
       throw new BadRequestException(
         'Le produit et l’emplacement actif doivent appartenir à cette boutique.',
       );
+    }
+    if (input.catalogueProductId && !catalogueProduct) {
+      throw new BadRequestException('The catalogue product is unavailable.');
+    }
+    if (input.catalogueVariantId && !catalogueVariant) {
+      throw new BadRequestException('The catalogue variant is unavailable.');
+    }
+    if (
+      catalogueVariant &&
+      input.catalogueProductId &&
+      catalogueVariant.catalogueProductId !== input.catalogueProductId
+    ) {
+      throw new BadRequestException(
+        'The catalogue variant does not belong to the catalogue product.',
+      );
+    }
+    const resolvedCatalogueProductId =
+      input.catalogueProductId ?? catalogueVariant?.catalogueProductId ?? null;
+    if (hasCatalogueSelection) {
+      const image = await this.prisma.catalogueProductImage.findFirst({
+        where: {
+          id: input.catalogueImageId,
+          catalogueProductId: resolvedCatalogueProductId!,
+          isVerified: true,
+          OR: input.catalogueVariantId
+            ? [
+                { variantId: null },
+                { variantId: input.catalogueVariantId },
+              ]
+            : [{ variantId: null }],
+          product: {
+            is: {
+              isActive: true,
+              productType: TypeProduit.MONTURE,
+            },
+          },
+        },
+        select: { id: true },
+      });
+      if (!image) {
+        throw new BadRequestException(
+          'The selected catalogue image is unavailable or does not match the selected variant.',
+        );
+      }
     }
 
     try {
       return await this.prisma.$transaction(async (tx) => {
         const stock = await tx.stock.create({
           data: {
+            ...(input.creationRequestId
+              ? { creationRequestId: input.creationRequestId }
+              : {}),
             ...(input.storeListingVariantId
               ? { storeListingVariantId: input.storeListingVariantId }
+              : {}),
+            ...(resolvedCatalogueProductId
+              ? { catalogueProductId: resolvedCatalogueProductId }
+              : {}),
+            ...(input.catalogueVariantId
+              ? { catalogueVariantId: input.catalogueVariantId }
               : {}),
             emplacement_id: input.emplacement_id,
             type_article: input.type_article,
@@ -196,6 +312,16 @@ export class InventoryService {
         return stock;
       });
     } catch (error) {
+      if (input.creationRequestId && isUniqueConflict(error)) {
+        const existing = await this.findCreatedRequest(
+          storeId,
+          input.creationRequestId,
+        );
+        if (existing) return existing;
+        throw new ConflictException(
+          'This stock creation request was already used by another shop.',
+        );
+      }
       if (isUniqueConflict(error) && input.storeListingVariantId) {
         throw new ConflictException(
           'Un stock existe déjà pour ce produit et cet emplacement.',
@@ -257,6 +383,54 @@ export class InventoryService {
     input: UpdateStockDto,
   ) {
     await this.authorize(userId, storeId, 'inventory.update');
+    let resolvedCatalogueProductId = input.catalogueProductId;
+    if (input.catalogueProductId === null && input.catalogueVariantId === undefined) {
+      throw new BadRequestException(
+        'Clear the catalogue variant before clearing its product.',
+      );
+    }
+    if (input.catalogueVariantId) {
+      const variant = await this.prisma.catalogueProductVariant.findFirst({
+        where: {
+          id: input.catalogueVariantId,
+          isActive: true,
+          deletedAt: null,
+          product: {
+            is: {
+              isActive: true,
+              productType: TypeProduit.MONTURE,
+            },
+          },
+        },
+        select: { id: true, catalogueProductId: true },
+      });
+      if (!variant) {
+        throw new BadRequestException('The catalogue variant is unavailable.');
+      }
+      if (
+        resolvedCatalogueProductId &&
+        resolvedCatalogueProductId !== variant.catalogueProductId
+      ) {
+        throw new BadRequestException(
+          'The catalogue variant does not belong to the catalogue product.',
+        );
+      }
+      resolvedCatalogueProductId =
+        resolvedCatalogueProductId ?? variant.catalogueProductId;
+    }
+    if (resolvedCatalogueProductId) {
+      const product = await this.prisma.catalogueProduct.findFirst({
+        where: {
+          id: resolvedCatalogueProductId,
+          isActive: true,
+          productType: TypeProduit.MONTURE,
+        },
+        select: { id: true },
+      });
+      if (!product) {
+        throw new BadRequestException('The catalogue product is unavailable.');
+      }
+    }
     const result = await this.prisma.$transaction(async (tx) => {
       const current = await tx.stock.findFirst({
         where: { id: stockId, location: { magasin_id: storeId } },
@@ -269,7 +443,17 @@ export class InventoryService {
           location: { magasin_id: storeId },
           seuil_reapprovisionnement: current.seuil_reapprovisionnement,
         },
-        data: { seuil_reapprovisionnement: input.seuil_reapprovisionnement },
+        data: {
+          seuil_reapprovisionnement: input.seuil_reapprovisionnement,
+          ...(input.catalogueProductId !== undefined
+            ? { catalogueProductId: resolvedCatalogueProductId }
+            : resolvedCatalogueProductId
+              ? { catalogueProductId: resolvedCatalogueProductId }
+              : {}),
+          ...(input.catalogueVariantId !== undefined
+            ? { catalogueVariantId: input.catalogueVariantId }
+            : {}),
+        },
       });
       if (updated.count !== 1) {
         throw new ConflictException(
@@ -675,6 +859,16 @@ export class InventoryService {
       storeId,
       permission,
     );
+  }
+
+  private findCreatedRequest(storeId: string, creationRequestId: string) {
+    return this.prisma.stock.findFirst({
+      where: {
+        creationRequestId,
+        location: { magasin_id: storeId },
+      },
+      select: stockSelect,
+    });
   }
 }
 

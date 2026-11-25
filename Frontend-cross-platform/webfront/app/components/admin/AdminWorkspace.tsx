@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
   BarChart3,
   Building2,
   ClipboardList,
   Eye,
+  Glasses,
   LayoutDashboard,
   LoaderCircle,
   Megaphone,
@@ -39,8 +41,9 @@ import {
 } from "@/services/admin.service";
 import { ApiError } from "@/services/api";
 import LogoWordmark from "../ui/LogoWordmark";
+import { AdminSharedCatalogue } from "./AdminSharedCatalogue";
 
-type Section =
+export type AdminSection =
   | "overview"
   | "shops"
   | "people"
@@ -50,7 +53,8 @@ type Section =
   | "plans"
   | "advertisements"
   | "campaigns"
-  | "controls";
+  | "controls"
+  | "sharedCatalogue";
 
 const MODULES = [
   ["dashboard", "Dashboard"],
@@ -80,7 +84,7 @@ const USER_STATUSES = [
 const adStatuses = ["DRAFT", "SCHEDULED", "ACTIVE", "PAUSED", "EXPIRED", "ARCHIVED"];
 
 const navigation: Array<{
-  id: Section;
+  id: AdminSection;
   label: string;
   icon: typeof LayoutDashboard;
 }> = [
@@ -94,6 +98,7 @@ const navigation: Array<{
   { id: "advertisements", label: "Advertisements", icon: Megaphone },
   { id: "campaigns", label: "Ad campaigns", icon: BarChart3 },
   { id: "controls", label: "Emergency controls", icon: Settings2 },
+  { id: "sharedCatalogue", label: "Shared catalogue", icon: Glasses },
 ];
 
 type PlanDraft = {
@@ -150,9 +155,15 @@ type CampaignDraft = {
   reason: string;
 };
 
-export function AdminWorkspace() {
+export function AdminWorkspace({
+  initialSection = "overview",
+}: {
+  initialSection?: AdminSection;
+}) {
   const { user, status, signOut } = useAuth();
-  const [section, setSection] = useState<Section>("overview");
+  const router = useRouter();
+  const pathname = usePathname();
+  const [section, setSection] = useState<AdminSection>(initialSection);
   const [overview, setOverview] = useState<Record<string, number> | null>(null);
   const [stores, setStores] = useState<AdminStore[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -170,7 +181,7 @@ export function AdminWorkspace() {
   const [entityFilter, setEntityFilter] = useState("");
   const [storeFilter, setStoreFilter] = useState("");
   const [userFilter, setUserFilter] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialSection !== "sharedCatalogue");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -216,6 +227,15 @@ export function AdminWorkspace() {
     };
   }, [entityFilter, search, storeFilter, userFilter, userKind]);
 
+  const navigateTo = (nextSection: AdminSection) => {
+    setSection(nextSection);
+    if (nextSection === "sharedCatalogue") {
+      router.push("/admin/shared-catalogue");
+    } else if (pathname !== "/admin") {
+      router.push("/admin");
+    }
+  };
+
   const applyData = useCallback((data: Awaited<ReturnType<typeof fetchData>>) => {
     setOverview(data.metrics);
     setStores(data.stores);
@@ -247,7 +267,11 @@ export function AdminWorkspace() {
   }, [applyData, fetchData]);
 
   useEffect(() => {
-    if (status === "authenticated" && isSuperAdmin(user?.role)) {
+    if (
+      status === "authenticated" &&
+      isSuperAdmin(user?.role) &&
+      (pathname === "/admin/shared-catalogue" ? false : section !== "sharedCatalogue")
+    ) {
       fetchData()
         .then(applyData)
         .catch((requestError: unknown) => {
@@ -259,7 +283,7 @@ export function AdminWorkspace() {
         })
         .finally(() => setLoading(false));
     }
-  }, [applyData, fetchData, status, user?.role]);
+  }, [applyData, fetchData, pathname, section, status, user?.role]);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -435,17 +459,26 @@ export function AdminWorkspace() {
       />
     );
   }
-  if (!isSuperAdmin(user.role)) {
+  const activeSection: AdminSection =
+    pathname === "/admin/shared-catalogue" ? "sharedCatalogue" : section;
+  if (
+    !isSuperAdmin(user.role) &&
+    !(user.role === "ADMIN" && activeSection === "sharedCatalogue")
+  ) {
     return (
       <AdminGate
-        title="Super Admin access only"
-        detail="Only accounts with the SUPER_ADMIN platform role can access this dashboard."
+        title="Administrator access only"
+        detail="This workspace is available only to platform administrators."
       />
     );
   }
 
+  const isSuperAdminUser = isSuperAdmin(user.role);
+  const visibleNavigation = isSuperAdminUser
+    ? navigation
+    : navigation.filter((item) => item.id === "sharedCatalogue");
   const pageTitle =
-    navigation.find((item) => item.id === section)?.label ?? "Overview";
+    navigation.find((item) => item.id === activeSection)?.label ?? "Overview";
 
   return (
     <div className="admin-shell">
@@ -454,18 +487,18 @@ export function AdminWorkspace() {
           <span className="admin-brand-mark">L</span>
           <span>
             <LogoWordmark variant="auto" size="sm" as="div" />
-            <small>SUPER ADMIN</small>
+            <small>{isSuperAdminUser ? "SUPER ADMIN" : "ADMIN"}</small>
           </span>
         </Link>
         <div className="admin-sidebar-label">WORKSPACE</div>
         <nav className="admin-nav" aria-label="Admin sections">
-          {navigation.map(({ id, label, icon: Icon }) => (
+          {visibleNavigation.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
-              className={`admin-nav-item ${section === id ? "is-active" : ""}`}
-              onClick={() => setSection(id)}
-              aria-current={section === id ? "page" : undefined}
+              className={`admin-nav-item ${activeSection === id ? "is-active" : ""}`}
+              onClick={() => navigateTo(id)}
+              aria-current={activeSection === id ? "page" : undefined}
             >
               <Icon size={17} />
               <span>{label}</span>
@@ -476,7 +509,7 @@ export function AdminWorkspace() {
           <span className="admin-avatar">{user.prenom?.slice(0, 1) ?? "A"}</span>
           <span className="admin-sidebar-user-copy">
             <strong>{user.prenom} {user.nom}</strong>
-            <small>Super administrator</small>
+            <small>{isSuperAdminUser ? "Super administrator" : "Administrator"}</small>
           </span>
           <button type="button" className="admin-logout" onClick={signOut} title="Sign out">
             <X size={16} />
@@ -491,34 +524,37 @@ export function AdminWorkspace() {
             <h1>{pageTitle}</h1>
           </div>
           <div className="admin-topbar-actions">
-            <form className="admin-search" onSubmit={submitSearch}>
-              <Search size={16} aria-hidden="true" />
-              <input
-                aria-label="Search shops, people, or orders"
-                placeholder="Search platform"
-                value={searchText}
-                onChange={(event) => setSearchText(event.target.value)}
-              />
-              <button type="submit">Search</button>
-            </form>
-            <span className="admin-role-pill"><ShieldCheck size={14} /> SUPER ADMIN</span>
+            {activeSection !== "sharedCatalogue" && (
+              <form className="admin-search" onSubmit={submitSearch}>
+                <Search size={16} aria-hidden="true" />
+                <input
+                  aria-label="Search shops, people, or orders"
+                  placeholder="Search platform"
+                  value={searchText}
+                  onChange={(event) => setSearchText(event.target.value)}
+                />
+                <button type="submit">Search</button>
+              </form>
+            )}
+            <span className="admin-role-pill"><ShieldCheck size={14} /> {isSuperAdminUser ? "SUPER ADMIN" : "ADMIN"}</span>
           </div>
         </header>
 
-        {(error || notice) && (
+        {activeSection !== "sharedCatalogue" && (error || notice) && (
           <div className={`admin-message ${error ? "is-error" : "is-success"}`} role="status">
             <span>{error || notice}</span>
             {error && <button type="button" onClick={() => void loadData()}>Retry</button>}
           </div>
         )}
 
-        {loading && <div className="admin-loading-line"><LoaderCircle size={15} /> Refreshing data…</div>}
+        {activeSection !== "sharedCatalogue" && loading && <div className="admin-loading-line"><LoaderCircle size={15} /> Refreshing data…</div>}
 
-        {section === "overview" && overview && (
+        {activeSection === "sharedCatalogue" && <AdminSharedCatalogue />}
+        {activeSection === "overview" && overview && (
           <OverviewSection
             overview={overview}
             stores={stores.slice(0, 5)}
-            onNavigate={setSection}
+            onNavigate={navigateTo}
             onViewShop={(id) => {
               setStoreFilter(id);
               setUserFilter("");
@@ -527,7 +563,7 @@ export function AdminWorkspace() {
             }}
           />
         )}
-        {section === "shops" && (
+        {activeSection === "shops" && (
           <ShopsSection
             stores={stores}
             plans={plans}
@@ -555,7 +591,7 @@ export function AdminWorkspace() {
             }}
           />
         )}
-        {section === "people" && (
+        {activeSection === "people" && (
           <PeopleSection
             users={users}
             plans={plans}
@@ -585,8 +621,8 @@ export function AdminWorkspace() {
             }}
           />
         )}
-        {section === "orders" && <OrdersSection orders={orders} />}
-        {section === "activity" && (
+        {activeSection === "orders" && <OrdersSection orders={orders} />}
+        {activeSection === "activity" && (
           <ActivitySection
             audit={audit}
             storeFilter={storeFilter}
@@ -604,8 +640,8 @@ export function AdminWorkspace() {
             onSubmit={() => void loadData()}
           />
         )}
-        {section === "usage" && <UsageSection clicks={clicks} usage={usage} />}
-        {section === "plans" && (
+        {activeSection === "usage" && <UsageSection clicks={clicks} usage={usage} />}
+        {activeSection === "plans" && (
           <PlansSection
             plans={plans}
             onCreate={() => setPlanDraft({ ...emptyPlan })}
@@ -629,7 +665,7 @@ export function AdminWorkspace() {
             }
           />
         )}
-        {section === "advertisements" && (
+        {activeSection === "advertisements" && (
           <AdvertisementsSection
             advertisements={advertisements}
             campaigns={campaigns}
@@ -652,7 +688,7 @@ export function AdminWorkspace() {
             onEdit={(ad) => setAdvertisementDraft(toAdvertisementDraft(ad))}
           />
         )}
-        {section === "campaigns" && (
+        {activeSection === "campaigns" && (
           <CampaignsSection
             campaigns={campaigns}
             onCreate={() =>
@@ -671,7 +707,7 @@ export function AdminWorkspace() {
             onEdit={(campaign) => setCampaignDraft(toCampaignDraft(campaign))}
           />
         )}
-        {section === "controls" && controls && (
+        {activeSection === "controls" && controls && (
           <PlatformControlsSection
             controls={controls}
             reason={controlsReason}
@@ -723,7 +759,7 @@ function OverviewSection({
 }: {
   overview: Record<string, number>;
   stores: AdminStore[];
-  onNavigate: (section: Section) => void;
+  onNavigate: (section: AdminSection) => void;
   onViewShop: (id: string) => void;
 }) {
   const cards = [

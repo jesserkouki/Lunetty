@@ -13,8 +13,19 @@ Review date: 2026-11-25
 
 ## Issues fixed
 
-No implementation changes were made during this review. The review was read-only and
-preserved the existing working catalogue implementation.
+The following Phase 1.1 remediation was applied:
+
+- Catalogue variants are now soft-archived through `isActive` and `deletedAt` instead
+  of physically deleted through the catalogue endpoint. Their image associations
+  remain intact, and search queries exclude archived variants.
+- `Stock` now has nullable direct foreign keys to `CatalogueProduct` and
+  `CatalogueProductVariant`.
+- Stock creation and update validate that a provided variant belongs to the provided
+  or inferred catalogue product.
+- Existing stock records are left with both catalogue fields `NULL` by the migration.
+- CI behavior was not changed: the repository migration history is explicitly
+  repaired separately, so this migration is not added to `prisma migrate deploy`
+  until that history is restored.
 
 ## Architecture findings
 
@@ -111,9 +122,10 @@ production ingestion.
 
 ## Remaining limitations
 
-- Shop stock is not yet directly linked to catalogue product/variant foreign keys.
-- Variant deletion behavior can promote variant images unless explicitly reconciled.
 - Image URL and source metadata lack scheme/source/license validation.
+- Catalogue-to-stock consistency is enforced transactionally; PostgreSQL does not
+  enforce a cross-table product/variant pair constraint, so every service mutation
+  must retain the validation checks.
 - The project migration history is repaired separately from this catalogue migration
   and CI does not deploy migrations, as documented by the existing workflow.
 - External image providers and frontend workflows are not implemented.

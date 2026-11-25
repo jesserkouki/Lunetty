@@ -83,9 +83,11 @@ export default function Header() {
     signIn(authenticatedUser, accountType);
     setAuthOpen(false);
     router.push(
-      accountType === "OPTICIAN"
-        ? "/optician/dashboard"
-        : "/client/dashboard",
+      authenticatedUser.role === "SUPER_ADMIN"
+        ? "/admin"
+        : accountType === "OPTICIAN"
+          ? "/optician/dashboard"
+          : "/client/dashboard",
     );
   };
   const handleLogout = () => {
@@ -101,7 +103,15 @@ export default function Header() {
           <span className="text-base font-semibold tracking-normal normal-case">
             Bonjour, {user.prenom}
           </span>
-          {user.accountType === "CLIENT" ? (
+          {user.role === "SUPER_ADMIN" ? (
+            <Link
+              href="/admin"
+              onClick={() => setOpen(false)}
+              className="border border-foreground/35 px-4 py-2 text-base font-semibold tracking-[0.08em] uppercase transition-colors hover:bg-foreground hover:text-background"
+            >
+              Espace super-admin
+            </Link>
+          ) : user.accountType === "CLIENT" ? (
             <Link
               href="/client/dashboard"
               onClick={() => setOpen(false)}

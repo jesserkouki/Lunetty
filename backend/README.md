@@ -134,6 +134,11 @@ before an eligible appointment. Email and SMS preferences are stored, but
 message delivery requires configured providers and is not enabled by these
 migrations.
 
+The additive migration `20261211120000_idempotent_stock_creation` adds a
+nullable unique request ID to stock records so clients can safely retry stock
+creation. Review and deploy it with `npx prisma migrate deploy` before enabling
+the updated stock-creation workflow.
+
 All API routes use the `/api/v1` prefix. Authentication endpoints:
 
 - `POST /api/v1/auth/register` with `{ "prenom", "nom", "email", "password" }`

@@ -2,6 +2,13 @@
 
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
+import type {
+  CatalogueImageSearch,
+  CatalogueImageSuggestion,
+  ExternalImageSearchResponse,
+  ExternalImageSuggestion,
+} from "../../../services/catalogue.service";
 import { formatDate, getMovementTypeBadge } from "./formatters";
 import {
   IconInventory,
@@ -19,12 +26,23 @@ interface OpticianInventoryProps {
   onApplyMovement: (stockId: string, input: Record<string, unknown>) => Promise<void>;
   onUpdateThreshold: (stockId: string, threshold: number) => Promise<void>;
   onCreateStock: (input: Record<string, unknown>) => Promise<void>;
+  onSearchCatalogue: (
+    search: CatalogueImageSearch,
+  ) => Promise<{ data: CatalogueImageSuggestion[] }>;
+  onSearchExternalCatalogue: (
+    search: CatalogueImageSearch,
+  ) => Promise<ExternalImageSearchResponse>;
+  onSearchPaidCatalogue: (
+    search: CatalogueImageSearch,
+  ) => Promise<ExternalImageSearchResponse>;
   onScanReference: (image: File) => Promise<string>;
   onCreateLocation: (input: Record<string, unknown>) => Promise<unknown>;
   onUpdateLocation: (locationId: string, input: Record<string, unknown>) => Promise<unknown>;
   onCreateLocationType: (input: Record<string, unknown>) => Promise<unknown>;
   onUpdateLocationType: (typeId: string, input: Record<string, unknown>) => Promise<unknown>;
   onLoadMovements: (stockId: string) => Promise<unknown>;
+  canCreateStock?: boolean;
+  readOnly?: boolean;
 }
 
 export function OpticianInventory({
@@ -34,12 +52,17 @@ export function OpticianInventory({
   onApplyMovement,
   onUpdateThreshold,
   onCreateStock,
+  onSearchCatalogue,
+  onSearchExternalCatalogue,
+  onSearchPaidCatalogue,
   onScanReference,
   onCreateLocation,
   onUpdateLocation,
   onCreateLocationType,
   onUpdateLocationType,
   onLoadMovements,
+  canCreateStock = true,
+  readOnly = false,
 }: OpticianInventoryProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "low" | "out">("all");
@@ -65,6 +88,41 @@ export function OpticianInventory({
 
   // New Stock Modal State
   const [newStockOpen, setNewStockOpen] = useState(false);
+  const [catalogueStep, setCatalogueStep] = useState(false);
+  const [catalogueSearch, setCatalogueSearch] = useState<CatalogueImageSearch>({
+    reference: "",
+  });
+  const [catalogueSuggestions, setCatalogueSuggestions] = useState<
+    CatalogueImageSuggestion[]
+  >([]);
+  const [catalogueSearching, setCatalogueSearching] = useState(false);
+  const [catalogueError, setCatalogueError] = useState("");
+  const [externalSuggestions, setExternalSuggestions] = useState<
+    ExternalImageSuggestion[]
+  >([]);
+  const [externalProviders, setExternalProviders] = useState<string[]>([]);
+  const [externalWarnings, setExternalWarnings] = useState<string[]>([]);
+  const [externalSearching, setExternalSearching] = useState(false);
+  const [externalError, setExternalError] = useState("");
+  const [externalStep, setExternalStep] = useState(false);
+  const [externalSelection, setExternalSelection] =
+    useState<ExternalImageSuggestion | null>(null);
+  const [paidSuggestions, setPaidSuggestions] = useState<
+    ExternalImageSuggestion[]
+  >([]);
+  const [paidSearching, setPaidSearching] = useState(false);
+  const [paidError, setPaidError] = useState("");
+  const [paidSearchStarted, setPaidSearchStarted] = useState(false);
+  const [paidSelection, setPaidSelection] =
+    useState<ExternalImageSuggestion | null>(null);
+  const [externalPersistenceWarning, setExternalPersistenceWarning] =
+    useState(false);
+  const [stockSubmitError, setStockSubmitError] = useState("");
+  const [catalogueSelection, setCatalogueSelection] = useState<{
+    productId: string;
+    variantId: string | null;
+    imageId: string;
+  } | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState("");
   const [articleType, setArticleType] = useState("VERRE_VUE");
   const [lensDesign, setLensDesign] = useState("SIMPLE");
@@ -109,6 +167,11 @@ export function OpticianInventory({
   } | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
+  const stockSubmitLock = useRef(false);
+  const creationRequestId = useRef<string | null>(null);
+  const catalogueSearchRequestId = useRef(0);
+  const externalSearchRequestId = useRef(0);
+  const paidSearchRequestId = useRef(0);
 
   // Extract raw inventory items
   const rawItems = Array.isArray(inventoryData)
@@ -154,6 +217,11 @@ export function OpticianInventory({
         frameAge !== "" &&
         frameSex !== "" &&
         frameSize.trim() !== "";
+  const internalSuggestion = catalogueSuggestions.find(
+    (suggestion) => suggestion.images.length > 0,
+  );
+  const internalImage = internalSuggestion?.images[0] ?? null;
+  const selectedExternalImage = paidSelection ?? externalSelection;
   const saveLocationTypeOverride = (type: Record<string, unknown>) => {
     setLocationTypeOverrides((current) => [
       ...current.filter((item) => item.id !== type.id),
@@ -204,6 +272,218 @@ export function OpticianInventory({
       setHistoryModal({ stockId, productTitle, movements: movs as Array<Record<string, unknown>> });
     } finally {
       setLoadingHistory(false);
+    }
+  }
+
+  async function searchExternalCatalogue(search: CatalogueImageSearch) {
+    const requestId = ++externalSearchRequestId.current;
+    setExternalStep(true);
+    setExternalSearching(true);
+    setExternalError("");
+    setExternalSelection(null);
+    setExternalPersistenceWarning(false);
+    setExternalSuggestions([]);
+    setExternalProviders([]);
+    setExternalWarnings([]);
+    try {
+      const response = await onSearchExternalCatalogue(search);
+      if (requestId !== externalSearchRequestId.current) return;
+      setExternalProviders(response.providers);
+      setExternalWarnings(response.warnings);
+      setExternalSuggestions(response.data);
+    } catch (reason) {
+      if (requestId !== externalSearchRequestId.current) return;
+      setExternalSuggestions([]);
+      setExternalProviders([]);
+      setExternalWarnings([]);
+      setExternalError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible de rechercher des images externes.",
+      );
+    } finally {
+      if (requestId === externalSearchRequestId.current) {
+        setExternalSearching(false);
+      }
+    }
+  }
+
+  async function searchPaidCatalogue(search: CatalogueImageSearch) {
+    const requestId = ++paidSearchRequestId.current;
+    setPaidSearchStarted(true);
+    setPaidSearching(true);
+    setPaidError("");
+    try {
+      const response = await onSearchPaidCatalogue(search);
+      if (requestId !== paidSearchRequestId.current) return;
+      setPaidSuggestions(response.data);
+    } catch (reason) {
+      if (requestId !== paidSearchRequestId.current) return;
+      setPaidSuggestions([]);
+      setPaidError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible de rechercher des images supplémentaires.",
+      );
+    } finally {
+      if (requestId === paidSearchRequestId.current) {
+        setPaidSearching(false);
+      }
+    }
+  }
+
+  async function searchCatalogue(search: CatalogueImageSearch) {
+    const requestId = ++catalogueSearchRequestId.current;
+    externalSearchRequestId.current += 1;
+    paidSearchRequestId.current += 1;
+    setExternalSearching(false);
+    setPaidSearching(false);
+    if (
+      !search.brand?.trim() &&
+      !search.reference?.trim() &&
+      !search.model?.trim() &&
+      !search.color?.trim() &&
+      !search.ean?.trim()
+    ) {
+      setCatalogueError("Indiquez une marque, une référence, un modèle, une couleur ou un EAN.");
+      setCatalogueSuggestions([]);
+      setCatalogueSearching(false);
+      setExternalError("");
+      setExternalSuggestions([]);
+      setExternalProviders([]);
+      setExternalWarnings([]);
+      setExternalStep(false);
+      setPaidSuggestions([]);
+      setPaidSearchStarted(false);
+      return;
+    }
+    setCatalogueSearching(true);
+    setCatalogueError("");
+    setCatalogueSelection(null);
+    setExternalSelection(null);
+    setExternalSuggestions([]);
+    setExternalProviders([]);
+    setExternalWarnings([]);
+    setExternalError("");
+    setExternalStep(false);
+    setPaidSuggestions([]);
+    setPaidError("");
+    setPaidSearchStarted(false);
+    setPaidSelection(null);
+    setExternalPersistenceWarning(false);
+    let hasInternalImage = false;
+    try {
+      const response = await onSearchCatalogue(search);
+      if (requestId !== catalogueSearchRequestId.current) return;
+      setCatalogueSuggestions(response.data);
+      hasInternalImage = response.data.some(
+        (suggestion) => suggestion.images.length > 0,
+      );
+    } catch (reason) {
+      if (requestId !== catalogueSearchRequestId.current) return;
+      setCatalogueSuggestions([]);
+      setCatalogueError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible de rechercher dans le catalogue.",
+      );
+    } finally {
+      if (requestId === catalogueSearchRequestId.current) {
+        setCatalogueSearching(false);
+      }
+    }
+    if (requestId !== catalogueSearchRequestId.current) return;
+    if (!hasInternalImage) {
+      await searchExternalCatalogue(search);
+    }
+  }
+
+  function updateCatalogueSearch(
+    field: keyof CatalogueImageSearch,
+    value: string,
+  ) {
+    catalogueSearchRequestId.current += 1;
+    externalSearchRequestId.current += 1;
+    paidSearchRequestId.current += 1;
+    setCatalogueSearching(false);
+    setExternalSearching(false);
+    setPaidSearching(false);
+    setCatalogueSearch((current) => ({ ...current, [field]: value }));
+    setCatalogueSuggestions([]);
+    setCatalogueSelection(null);
+    setCatalogueError("");
+    setExternalSuggestions([]);
+    setExternalProviders([]);
+    setExternalWarnings([]);
+    setExternalSelection(null);
+    setExternalError("");
+    setExternalStep(false);
+    setPaidSuggestions([]);
+    setPaidError("");
+    setPaidSearchStarted(false);
+    setPaidSelection(null);
+    setExternalPersistenceWarning(false);
+  }
+
+  async function createStock(
+    selection: typeof catalogueSelection,
+  ) {
+    if (stockSubmitLock.current) return;
+    stockSubmitLock.current = true;
+    setSubmitting(true);
+    setStockSubmitError("");
+    try {
+      creationRequestId.current ??= crypto.randomUUID();
+      await onCreateStock({
+        emplacement_id: selectedLocationId,
+        type_article: articleType,
+        ...(isLensItem
+          ? {
+              conception_verre: lensDesign,
+              traitement_verre: lensTreatment,
+              puissance_droite: Number(rightPower),
+              puissance_gauche: Number(leftPower),
+            }
+          : {
+              marque_reference: frameBrandReference.trim(),
+              age_monture: frameAge,
+              public_cible: frameSex,
+              taille_monture: frameSize.trim(),
+            }),
+        ...(selection
+          ? {
+              catalogueProductId: selection.productId,
+              ...(selection.variantId
+                ? { catalogueVariantId: selection.variantId }
+                : {}),
+              catalogueImageId: selection.imageId,
+            }
+          : {}),
+        creationRequestId: creationRequestId.current,
+        quantite_disponible: initialQty,
+        seuil_reapprovisionnement: initialThreshold,
+      });
+      setNewStockOpen(false);
+      setCatalogueStep(false);
+      setCatalogueSelection(null);
+      setExternalSelection(null);
+      setExternalSuggestions([]);
+      setExternalProviders([]);
+      setExternalWarnings([]);
+      setPaidSelection(null);
+      setPaidSuggestions([]);
+      setPaidSearchStarted(false);
+      setExternalPersistenceWarning(false);
+      creationRequestId.current = null;
+    } catch (reason) {
+      setStockSubmitError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible de créer le stock. Réessayez.",
+      );
+    } finally {
+      stockSubmitLock.current = false;
+      setSubmitting(false);
     }
   }
 
@@ -271,18 +551,42 @@ export function OpticianInventory({
             <h3>Registre des stocks magasin</h3>
             <p className="opt-card-sub">Gestion des quantités, alertes de réapprovisionnement et traçabilité</p>
           </div>
-          <button
-            className="button primary"
-            onClick={() => {
-              if (locations.length > 0 && !selectedLocationId) {
-                setSelectedLocationId(String(locations[0].id));
-              }
-              setNewStockOpen(true);
-            }}
-            type="button"
-          >
-            <IconPlus height={16} width={16} /> Nouveau stock article
-          </button>
+          {canCreateStock && (
+            <button
+              className="button primary"
+              onClick={() => {
+                if (locations.length > 0 && !selectedLocationId) {
+                  setSelectedLocationId(String(locations[0].id));
+                }
+                catalogueSearchRequestId.current += 1;
+                externalSearchRequestId.current += 1;
+                paidSearchRequestId.current += 1;
+                setCatalogueStep(false);
+                setCatalogueSearch({ reference: "" });
+                setCatalogueSuggestions([]);
+                setCatalogueSearching(false);
+                setCatalogueError("");
+                setCatalogueSelection(null);
+                setExternalSuggestions([]);
+                setExternalProviders([]);
+                setExternalWarnings([]);
+                setExternalSearching(false);
+                setExternalError("");
+                setExternalStep(false);
+                setExternalSelection(null);
+                setPaidSuggestions([]);
+                setPaidSearching(false);
+                setPaidError("");
+                setPaidSearchStarted(false);
+                setPaidSelection(null);
+                setExternalPersistenceWarning(false);
+                setNewStockOpen(true);
+              }}
+              type="button"
+            >
+              <IconPlus height={16} width={16} /> Nouveau stock article
+            </button>
+          )}
         </div>
 
         <div className="opt-card-body">
@@ -336,7 +640,7 @@ export function OpticianInventory({
                     <th>Réservé</th>
                     <th>Seuil réappro.</th>
                     <th>État</th>
-                    <th style={{ textAlign: "right" }}>Actions directes</th>
+                    {!readOnly && <th style={{ textAlign: "right" }}>Actions directes</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -377,18 +681,20 @@ export function OpticianInventory({
                           <span className="opt-reserved-val">{reserved}</span>
                         </td>
                         <td data-label="Seuil réappro.">
-                          <button
-                            className="opt-threshold-btn"
-                            onClick={() => setEditThresholdModal({
-                              stockId: String(item.id),
-                              productTitle: title,
-                              threshold,
-                            })}
-                            type="button"
-                            title="Modifier le seuil d'alerte"
-                          >
-                            {threshold} ✎
-                          </button>
+                          {readOnly ? threshold : (
+                            <button
+                              className="opt-threshold-btn"
+                              onClick={() => setEditThresholdModal({
+                                stockId: String(item.id),
+                                productTitle: title,
+                                threshold,
+                              })}
+                              type="button"
+                              title="Modifier le seuil d'alerte"
+                            >
+                              {threshold} ✎
+                            </button>
+                          )}
                         </td>
                         <td data-label="État">
                           {isOut ? (
@@ -399,28 +705,30 @@ export function OpticianInventory({
                             <span className="opt-status-pill badge-emerald">Optimal</span>
                           )}
                         </td>
-                        <td data-label="Actions" style={{ textAlign: "right" }}>
-                          <div className="opt-row-action-group">
-                            <button
-                              className="button secondary small"
-                              onClick={() => setMovementModal({
-                                stockId: String(item.id),
-                                productTitle: title,
-                                currentQty: qty,
-                              })}
-                              type="button"
-                            >
-                              + Mouvement
-                            </button>
-                            <button
-                              className="button secondary small"
-                              onClick={() => openHistory(String(item.id), title)}
-                              type="button"
-                            >
-                              Historique
-                            </button>
-                          </div>
-                        </td>
+                        {!readOnly && (
+                          <td data-label="Actions" style={{ textAlign: "right" }}>
+                            <div className="opt-row-action-group">
+                              <button
+                                className="button secondary small"
+                                onClick={() => setMovementModal({
+                                  stockId: String(item.id),
+                                  productTitle: title,
+                                  currentQty: qty,
+                                })}
+                                type="button"
+                              >
+                                + Mouvement
+                              </button>
+                              <button
+                                className="button secondary small"
+                                onClick={() => openHistory(String(item.id), title)}
+                                type="button"
+                              >
+                                Historique
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -606,15 +914,22 @@ export function OpticianInventory({
           role="dialog"
           aria-modal="true"
         >
-          <div className="opt-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div
+            className={`opt-modal-card${catalogueStep ? " large inventory-catalogue-modal" : ""}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="opt-modal-header">
               <div className="opt-modal-title-wrap">
                 <div className="opt-icon-bubble">
                   <IconPlus height={18} width={18} />
                 </div>
                 <div>
-                  <h3>Ajouter un article au stock</h3>
-                  <p className="opt-modal-sub">Choisissez le produit, son emplacement et sa quantité.</p>
+                  <h3>{catalogueStep ? "Choisir une image catalogue" : "Ajouter un article au stock"}</h3>
+                  <p className="opt-modal-sub">
+                    {catalogueStep
+                      ? "Sélectionnez une image vérifiée pour cette monture, ou continuez sans image."
+                      : "Choisissez le produit, son emplacement et sa quantité."}
+                  </p>
                 </div>
               </div>
               <button className="opt-modal-close" onClick={() => setNewStockOpen(false)} type="button">
@@ -623,6 +938,610 @@ export function OpticianInventory({
             </div>
 
             <div className="opt-modal-body">
+              {catalogueStep ? (
+                <div className="catalogue-selection-step">
+                  <div className="catalogue-search-fields">
+                    <label className="field">
+                      <span>Marque</span>
+                      <input
+                        value={catalogueSearch.brand ?? ""}
+                        onChange={(event) =>
+                          updateCatalogueSearch("brand", event.target.value)
+                        }
+                        maxLength={120}
+                        placeholder="Ex. Ray-Ban"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Référence (reprise du formulaire)</span>
+                      <input
+                        value={catalogueSearch.reference ?? ""}
+                        onChange={(event) =>
+                          updateCatalogueSearch("reference", event.target.value)
+                        }
+                        maxLength={160}
+                        placeholder="Référence de la monture"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Modèle</span>
+                      <input
+                        value={catalogueSearch.model ?? ""}
+                        onChange={(event) =>
+                          updateCatalogueSearch("model", event.target.value)
+                        }
+                        maxLength={160}
+                        placeholder="Nom du modèle"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Couleur</span>
+                      <input
+                        value={catalogueSearch.color ?? ""}
+                        onChange={(event) =>
+                          updateCatalogueSearch("color", event.target.value)
+                        }
+                        maxLength={100}
+                        placeholder="Ex. Noir"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>EAN / code-barres</span>
+                      <input
+                        value={catalogueSearch.ean ?? ""}
+                        onChange={(event) =>
+                          updateCatalogueSearch("ean", event.target.value)
+                        }
+                        maxLength={14}
+                        inputMode="numeric"
+                        placeholder="Code EAN"
+                      />
+                    </label>
+                    <button
+                      className="button secondary catalogue-search-button"
+                      type="button"
+                      disabled={catalogueSearching}
+                      onClick={() => void searchCatalogue(catalogueSearch)}
+                    >
+                      {catalogueSearching ? "Recherche…" : "Modifier la recherche"}
+                    </button>
+                  </div>
+
+                  {catalogueError && (
+                    <p className="error-message" role="alert">
+                      {catalogueError}
+                    </p>
+                  )}
+                  {catalogueSelection && (
+                    <p className="catalogue-selection-confirmation" role="status">
+                      Image vérifiée sélectionnée. Le produit et la variante
+                      seront liés au stock, mais l’identifiant précis de
+                      l’image ne sera pas enregistré.
+                    </p>
+                  )}
+                  {externalSelection && (
+                    <p className="catalogue-external-selection-confirmation" role="status">
+                      Image externe sélectionnée. Elle ne sera pas enregistrée avec le stock.
+                    </p>
+                  )}
+                  {paidSelection && (
+                    <p className="catalogue-external-selection-confirmation" role="status">
+                      Résultat SerpApi sélectionné. Il n’est ni vérifié ni enregistré avec le stock.
+                    </p>
+                  )}
+                  {catalogueSearching ? (
+                    <p className="catalogue-search-status" role="status">
+                      Recherche des images vérifiées…
+                    </p>
+                  ) : (
+                    <>
+                      {internalSuggestion && internalImage ? (
+                        <section className="catalogue-result-section">
+                          <div className="catalogue-result-heading">
+                            <div>
+                              <strong>Suggestion vérifiée par Lunetty</strong>
+                              <span>Catalogue interne · image approuvée</span>
+                            </div>
+                            <div className="catalogue-search-actions">
+                              <button
+                                className="button secondary"
+                                type="button"
+                                disabled={externalSearching}
+                                onClick={() =>
+                                  void searchExternalCatalogue(catalogueSearch)
+                                }
+                              >
+                                Rechercher d’autres images gratuites
+                              </button>
+                              <button
+                                className="button secondary"
+                                type="button"
+                                disabled={paidSearching}
+                                onClick={() =>
+                                  void searchPaidCatalogue(catalogueSearch)
+                                }
+                              >
+                                Search other images
+                              </button>
+                            </div>
+                          </div>
+                          <div className="catalogue-image-grid">
+                            {(() => {
+                              const suggestion = internalSuggestion;
+                              const image = internalImage;
+                              const isSelected =
+                                catalogueSelection?.productId ===
+                                  suggestion.product.id &&
+                                catalogueSelection.imageId === image.id &&
+                                catalogueSelection.variantId ===
+                                  (suggestion.variant?.id ?? null);
+                              const isApproximate =
+                                suggestion.matchType === "APPROXIMATE";
+                              return (
+                                <article
+                                  className={`catalogue-image-card${isSelected ? " selected" : ""}`}
+                                  key={image.id}
+                                >
+                                  <div className="catalogue-image-preview">
+                                    <img
+                                      src={image.imageUrl}
+                                      alt={`${suggestion.product.brand} ${suggestion.product.model ?? ""} ${suggestion.variant?.colorName ?? ""}`}
+                                      loading="lazy"
+                                    />
+                                  </div>
+                                  <div className="catalogue-image-details">
+                                    <span
+                                      className={`catalogue-match-badge${isApproximate ? " approximate" : ""}`}
+                                    >
+                                      {isApproximate
+                                        ? "Correspondance approximative"
+                                        : suggestion.matchType ===
+                                            "NORMALIZED_BRAND_REFERENCE"
+                                          ? "Correspondance normalisée"
+                                          : "Correspondance exacte"}
+                                    </span>
+                                    <strong>{suggestion.product.brand}</strong>
+                                    <span>
+                                      {suggestion.product.model ??
+                                        "Modèle non renseigné"}
+                                    </span>
+                                    <span>
+                                      Réf. {suggestion.product.reference}
+                                    </span>
+                                    <span>
+                                      {suggestion.variant?.colorName
+                                        ? `Couleur : ${suggestion.variant.colorName}`
+                                        : "Image du produit"}
+                                    </span>
+                                    <button
+                                      className={`button ${isSelected ? "primary" : "secondary"} catalogue-select-button`}
+                                      type="button"
+                                      aria-pressed={isSelected}
+                                      onClick={() => {
+                                        setCatalogueSelection({
+                                          productId: suggestion.product.id,
+                                          variantId:
+                                            suggestion.variant?.id ?? null,
+                                          imageId: image.id,
+                                        });
+                                        setExternalSelection(null);
+                                        setPaidSelection(null);
+                                        setExternalPersistenceWarning(false);
+                                      }}
+                                    >
+                                      {isSelected
+                                        ? "Image sélectionnée"
+                                        : "Sélectionner cette image"}
+                                    </button>
+                                  </div>
+                                </article>
+                              );
+                            })()}
+                          </div>
+                        </section>
+                      ) : (
+                        !catalogueError && (
+                          <div className="catalogue-empty-state">
+                            <strong>Aucune image vérifiée trouvée</strong>
+                            <span>
+                              La recherche externe est lancée automatiquement.
+                            </span>
+                          </div>
+                        )
+                      )}
+
+                      {externalStep && (
+                        <section className="catalogue-result-section external-image-section">
+                          <div className="catalogue-result-heading">
+                            <div>
+                              <strong>
+                                Recherche gratuite ·{" "}
+                                {externalProviders.join(" + ") || "Brave / Openverse"} ·
+                                images non vérifiées
+                              </strong>
+                              <span>
+                                Les correspondances textuelles ne prouvent pas
+                                le modèle exact ni les droits d’utilisation.
+                              </span>
+                            </div>
+                            {internalImage && (
+                              <button
+                                className="button secondary"
+                                type="button"
+                                onClick={() => {
+                                  setExternalStep(false);
+                                  setExternalSelection(null);
+                                  setExternalPersistenceWarning(false);
+                                }}
+                              >
+                                Return to internal suggestion
+                              </button>
+                            )}
+                            <button
+                              className="button secondary"
+                              type="button"
+                              disabled={paidSearching}
+                              onClick={() =>
+                                void searchPaidCatalogue(catalogueSearch)
+                              }
+                            >
+                              Search other images
+                            </button>
+                          </div>
+
+                          {externalWarnings.map((warning) => (
+                            <p
+                              className="catalogue-provider-notice"
+                              key={warning}
+                              role="status"
+                            >
+                              {warning}
+                            </p>
+                          ))}
+                          {externalSearching && (
+                            <p className="catalogue-search-status" role="status">
+                              Recherche gratuite avec Brave et Openverse…
+                            </p>
+                          )}
+                          {externalError && (
+                            <div className="catalogue-external-error" role="alert">
+                              <span>
+                                {externalError} Vous pouvez réessayer ou
+                                continuer sans image.
+                              </span>
+                              <button
+                                className="button secondary"
+                                type="button"
+                                disabled={externalSearching}
+                                onClick={() =>
+                                  void searchExternalCatalogue(catalogueSearch)
+                                }
+                              >
+                                Réessayer
+                              </button>
+                            </div>
+                          )}
+                          {!externalSearching &&
+                            !externalError &&
+                            externalSuggestions.length === 0 && (
+                              <div className="catalogue-empty-state">
+                                <strong>Aucun résultat externe disponible</strong>
+                                <span>
+                                  Modifiez les critères ou continuez sans image.
+                                </span>
+                              </div>
+                            )}
+                          {externalSuggestions.length > 0 && (
+                            <div className="catalogue-image-grid">
+                              {externalSuggestions.map((result) => {
+                                const isSelected =
+                                  externalSelection?.id === result.id;
+                                const isApproximate =
+                                  result.matchSignal === "SEARCH_CANDIDATE";
+                                const matchLabel =
+                                  result.matchSignal === "EAN_TEXT_MATCH"
+                                    ? "EAN mentionné dans le texte · non vérifié"
+                                    : result.matchSignal === "BRAND_REFERENCE_TEXT_MATCH"
+                                      ? "Marque et référence mentionnées · non vérifié"
+                                      : result.matchSignal === "BRAND_MODEL_TEXT_MATCH"
+                                        ? "Marque et modèle mentionnés · non vérifié"
+                                        : result.matchSignal === "REFERENCE_TEXT_MATCH"
+                                          ? "Référence mentionnée · non vérifié"
+                                          : "Correspondance approximative · non vérifiée";
+                                return (
+                                  <article
+                                    className={`catalogue-image-card external-image-card${isSelected ? " selected" : ""}`}
+                                    key={result.id}
+                                  >
+                                    <div className="catalogue-image-preview">
+                                      <Image
+                                        src={result.imageUrl}
+                                        alt={result.title}
+                                        width={320}
+                                        height={240}
+                                        unoptimized
+                                        loading="lazy"
+                                      />
+                                    </div>
+                                    <div className="catalogue-image-details">
+                                      <span
+                                        className={`catalogue-match-badge${isApproximate ? " approximate" : ""}`}
+                                      >
+                                        {matchLabel}
+                                      </span>
+                                      <strong>{result.title}</strong>
+                                      <span>Fournisseur : {result.provider}</span>
+                                      {result.description && (
+                                        <span>{result.description}</span>
+                                      )}
+                                      <span>
+                                        Recherche :{" "}
+                                        {[
+                                          catalogueSearch.brand,
+                                          catalogueSearch.model,
+                                          catalogueSearch.reference,
+                                          catalogueSearch.color,
+                                          catalogueSearch.ean,
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" · ")}
+                                      </span>
+                                      <span>
+                                        Source : {result.source} · {result.sourceDomain}
+                                      </span>
+                                      {result.creator && (
+                                        <span>
+                                          Auteur :{" "}
+                                          {result.creatorUrl ? (
+                                            <a
+                                              href={result.creatorUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                            >
+                                              {result.creator}
+                                            </a>
+                                          ) : (
+                                            result.creator
+                                          )}
+                                        </span>
+                                      )}
+                                      {result.license ? (
+                                        <span>
+                                          Licence annoncée : {result.license.toUpperCase()}
+                                          {result.licenseVersion
+                                            ? ` ${result.licenseVersion}`
+                                            : ""}
+                                        </span>
+                                      ) : (
+                                        <span>
+                                          Aucune licence fournie ; les droits
+                                          d’usage commercial ne sont pas établis.
+                                        </span>
+                                      )}
+                                      {result.attribution && (
+                                        <span>
+                                          Attribution : {result.attribution}
+                                        </span>
+                                      )}
+                                      <div className="external-image-links">
+                                        <a
+                                          href={result.sourcePageUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                        >
+                                          Page source
+                                        </a>
+                                        {result.originalImageUrl && (
+                                          <a
+                                            href={result.originalImageUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                          >
+                                            Image originale
+                                          </a>
+                                        )}
+                                        {result.licenseUrl && (
+                                          <a
+                                            href={result.licenseUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                          >
+                                            Conditions de licence
+                                          </a>
+                                        )}
+                                      </div>
+                                      <button
+                                        className={`button ${isSelected ? "primary" : "secondary"} catalogue-select-button`}
+                                        type="button"
+                                        aria-pressed={isSelected}
+                                        onClick={() => {
+                                          setExternalSelection(result);
+                                          setPaidSelection(null);
+                                          setCatalogueSelection(null);
+                                          setExternalPersistenceWarning(false);
+                                        }}
+                                      >
+                                        {isSelected
+                                          ? "Image externe sélectionnée"
+                                          : "Sélectionner cette image"}
+                                      </button>
+                                    </div>
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <p className="catalogue-provider-notice">
+                            Résultats externes non vérifiés. Les informations
+                            de licence et d’attribution proviennent du
+                            fournisseur et ne constituent pas une validation
+                            juridique ni une correspondance SKU.
+                          </p>
+                        </section>
+                      )}
+
+                      {paidSearchStarted && (
+                        <section className="catalogue-result-section external-image-section">
+                          <div className="catalogue-result-heading">
+                            <div>
+                              <strong>Résultats SerpApi · non vérifiés</strong>
+                              <span>
+                                Recherche déclenchée à votre demande. Ces
+                                résultats ne sont pas approuvés par Lunetty.
+                              </span>
+                            </div>
+                            {internalImage && (
+                              <button
+                                className="button secondary"
+                                type="button"
+                                onClick={() => setPaidSearchStarted(false)}
+                              >
+                                Return to internal suggestion
+                              </button>
+                            )}
+                          </div>
+                          {paidSearching && (
+                            <p className="catalogue-search-status" role="status">
+                              Recherche d’autres images…
+                            </p>
+                          )}
+                          {paidError && (
+                            <div className="catalogue-external-error" role="alert">
+                              <span>{paidError}</span>
+                              <button
+                                className="button secondary"
+                                type="button"
+                                disabled={paidSearching}
+                                onClick={() =>
+                                  void searchPaidCatalogue(catalogueSearch)
+                                }
+                              >
+                                Réessayer
+                              </button>
+                            </div>
+                          )}
+                          {!paidSearching &&
+                            !paidError &&
+                            paidSuggestions.length === 0 && (
+                              <div className="catalogue-empty-state">
+                                <strong>Aucun résultat SerpApi disponible</strong>
+                                <span>
+                                  Vérifiez les critères ou continuez sans image.
+                                </span>
+                              </div>
+                            )}
+                          {paidSuggestions.length > 0 && (
+                            <div className="catalogue-image-grid">
+                              {paidSuggestions.map((result) => {
+                                const isSelected =
+                                  paidSelection?.id === result.id;
+                                return (
+                                  <article
+                                    className={`catalogue-image-card external-image-card${isSelected ? " selected" : ""}`}
+                                    key={result.id}
+                                  >
+                                    <div className="catalogue-image-preview">
+                                      <Image
+                                        src={result.imageUrl}
+                                        alt={result.title}
+                                        width={320}
+                                        height={240}
+                                        unoptimized
+                                        loading="lazy"
+                                      />
+                                    </div>
+                                    <div className="catalogue-image-details">
+                                      <span className="catalogue-match-badge approximate">
+                                        {result.matchSignal === "SEARCH_CANDIDATE"
+                                          ? "Correspondance approximative · non vérifiée"
+                                          : "Texte correspondant · non vérifié"}
+                                      </span>
+                                      <strong>{result.title}</strong>
+                                      <span>Fournisseur : SerpApi · {result.sourceDomain}</span>
+                                      <span>
+                                        Recherche :{" "}
+                                        {[
+                                          catalogueSearch.brand,
+                                          catalogueSearch.model,
+                                          catalogueSearch.reference,
+                                          catalogueSearch.color,
+                                          catalogueSearch.ean,
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" · ")}
+                                      </span>
+                                      <span>
+                                        Aucun détail de licence n’est fourni ;
+                                        les droits d’usage commercial ne sont
+                                        pas établis.
+                                      </span>
+                                      <div className="external-image-links">
+                                        <a
+                                          href={result.sourcePageUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                        >
+                                          Page source
+                                        </a>
+                                        {result.originalImageUrl && (
+                                          <a
+                                            href={result.originalImageUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                          >
+                                            Image originale
+                                          </a>
+                                        )}
+                                      </div>
+                                      <button
+                                        className={`button ${isSelected ? "primary" : "secondary"} catalogue-select-button`}
+                                        type="button"
+                                        aria-pressed={isSelected}
+                                        onClick={() => {
+                                          setPaidSelection(result);
+                                          setExternalSelection(null);
+                                          setCatalogueSelection(null);
+                                          setExternalPersistenceWarning(false);
+                                        }}
+                                      >
+                                        {isSelected
+                                          ? "Image SerpApi sélectionnée"
+                                          : "Sélectionner cette image"}
+                                      </button>
+                                    </div>
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <p className="catalogue-provider-notice">
+                            Les images SerpApi sont des résultats tiers. Leur
+                            source est affichée, mais aucun droit ni statut de
+                            vérification n’est garanti.
+                          </p>
+                        </section>
+                      )}
+
+                      <section className="catalogue-upload-option">
+                        <button
+                          className="button secondary"
+                          type="button"
+                          disabled
+                          title="Le stockage et l’association d’images au stock ne sont pas disponibles."
+                        >
+                          Upload my own image
+                        </button>
+                        <span>
+                          Le serveur ne dispose pas encore d’un stockage
+                          d’images associé au stock. L’import manuel est donc
+                          désactivé pour éviter de perdre votre image.
+                        </span>
+                      </section>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <>
               <div className="field">
                 <span>Type d’article</span>
                 <select
@@ -792,23 +1711,25 @@ export function OpticianInventory({
                       </option>
                     ))}
                   </select>
-                  <button
-                    className="button secondary inventory-add-location"
-                    onClick={() => {
-                      setNewLocationName("");
-                      setNewLocationType("standard:STORE");
-                      setNewLocationError("");
-                      setNewLocationOpen((open) => !open);
-                      setEditingLocation(null);
-                    }}
-                    type="button"
-                    aria-label="Ajouter un emplacement"
-                    title="Ajouter un emplacement"
-                  >
-                    <IconPlus height={16} width={16} />
-                  </button>
+                  {!readOnly && (
+                    <button
+                      className="button secondary inventory-add-location"
+                      onClick={() => {
+                        setNewLocationName("");
+                        setNewLocationType("standard:STORE");
+                        setNewLocationError("");
+                        setNewLocationOpen((open) => !open);
+                        setEditingLocation(null);
+                      }}
+                      type="button"
+                      aria-label="Ajouter un emplacement"
+                      title="Ajouter un emplacement"
+                    >
+                      <IconPlus height={16} width={16} />
+                    </button>
+                  )}
                 </div>
-                {selectedLocation && !newLocationOpen && (
+                {selectedLocation && !newLocationOpen && !readOnly && (
                   <div className="inventory-location-actions">
                     <button
                       className="button secondary"
@@ -1229,47 +2150,144 @@ export function OpticianInventory({
                   onChange={(e) => setInitialThreshold(Number(e.target.value))}
                 />
               </div>
+                </>
+              )}
             </div>
 
             <div className="opt-modal-footer">
-              <button className="button secondary" onClick={() => setNewStockOpen(false)} type="button">
-                Annuler
-              </button>
-              <button
-                className="button primary"
-                disabled={submitting || !isStockFormValid || !selectedLocationId}
-                onClick={async () => {
-                  setSubmitting(true);
-                  try {
-                    await onCreateStock({
-                      emplacement_id: selectedLocationId,
-                      type_article: articleType,
-                      ...(isLensItem
-                        ? {
-                            conception_verre: lensDesign,
-                            traitement_verre: lensTreatment,
-                            puissance_droite: Number(rightPower),
-                            puissance_gauche: Number(leftPower),
-                          }
-                        : {
-                            marque_reference: frameBrandReference.trim(),
-                            age_monture: frameAge,
-                            public_cible: frameSex,
-                            taille_monture: frameSize.trim(),
-                          }),
-                      quantite_disponible: initialQty,
-                      seuil_reapprovisionnement: initialThreshold,
-                    });
-                    setNewStockOpen(false);
-                  } finally {
-                    setSubmitting(false);
-                  }
-                }}
-                type="button"
-              >
-                {submitting ? "Création…" : "Créer le stock"}
-              </button>
+              {catalogueStep ? (
+                <>
+                  <button
+                    className="button secondary"
+                    onClick={() => setCatalogueStep(false)}
+                    type="button"
+                    disabled={submitting}
+                  >
+                    Retour au formulaire
+                  </button>
+                  <button
+                    className="button secondary"
+                    onClick={() => {
+                      if (selectedExternalImage) {
+                        setExternalPersistenceWarning(true);
+                        return;
+                      }
+                      void createStock(null);
+                    }}
+                    type="button"
+                    disabled={submitting}
+                  >
+                    {submitting ? "Création…" : "Continuer sans image"}
+                  </button>
+                  <button
+                    className="button primary"
+                    disabled={
+                      submitting ||
+                      (!catalogueSelection && !selectedExternalImage)
+                    }
+                    onClick={() => {
+                      if (selectedExternalImage || catalogueSelection) {
+                        setExternalPersistenceWarning(true);
+                        return;
+                      }
+                      if (catalogueSelection) {
+                        void createStock(catalogueSelection);
+                      }
+                    }}
+                    type="button"
+                  >
+                    {submitting
+                      ? "Création…"
+                      : selectedExternalImage
+                        ? "Créer sans image externe"
+                        : "Créer le stock"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="button secondary"
+                    onClick={() => setNewStockOpen(false)}
+                    type="button"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    className="button primary"
+                    disabled={submitting || !isStockFormValid || !selectedLocationId}
+                    onClick={() => {
+                      if (articleType !== "MONTURE") {
+                        void createStock(null);
+                        return;
+                      }
+                      const initialSearch = {
+                        reference: frameBrandReference.trim(),
+                      };
+                      setCatalogueSearch(initialSearch);
+                      setCatalogueSuggestions([]);
+                      setCatalogueSelection(null);
+                      setCatalogueError("");
+                      setStockSubmitError("");
+                      setCatalogueStep(true);
+                      void searchCatalogue(initialSearch);
+                    }}
+                    type="button"
+                  >
+                    {submitting ? "Création…" : "Créer le stock"}
+                  </button>
+                </>
+              )}
             </div>
+            {externalPersistenceWarning && (
+              <div
+                className="catalogue-persistence-warning"
+                role="alertdialog"
+                aria-live="assertive"
+              >
+                <strong>
+                  {selectedExternalImage
+                    ? "L’image externe ne sera pas enregistrée"
+                    : "L’image catalogue ne sera pas enregistrée sur le stock"}
+                </strong>
+                <span>
+                  {selectedExternalImage
+                    ? "Le stock sera créé sans image. La source et la licence de ce résultat ne peuvent pas être conservées dans le modèle actuel."
+                    : "Le produit et la variante seront liés au stock et la sélection restera validée, mais le modèle actuel ne stocke pas l’identifiant de l’image sur le stock."}
+                </span>
+                <div>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => setExternalPersistenceWarning(false)}
+                  >
+                    Retour à la sélection
+                  </button>
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => {
+                      setExternalPersistenceWarning(false);
+                      void createStock(
+                        selectedExternalImage ? null : catalogueSelection,
+                      );
+                    }}
+                  >
+                    {submitting
+                      ? "Création…"
+                      : selectedExternalImage
+                        ? "Confirmer sans image"
+                        : "Confirmer sans enregistrer l’image"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {stockSubmitError && (
+              <p className="error-message catalogue-submit-error" role="alert">
+                {stockSubmitError}
+              </p>
+            )}
           </div>
         </div>
       )}

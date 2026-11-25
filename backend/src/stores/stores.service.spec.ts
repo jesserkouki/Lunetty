@@ -111,6 +111,9 @@ describe('StoresService', () => {
   it('creates the store and owner membership atomically', async () => {
     const store = { id: 'store-id', nom: 'Optique', slug: 'optique' };
     const tx = {
+      parametresPlateforme: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       magasin: {
         create: jest.fn().mockResolvedValue(store),
         findUniqueOrThrow: jest.fn().mockResolvedValue(store),
@@ -167,6 +170,9 @@ describe('StoresService', () => {
   it('creates a shop without an RNE code while verification is bypassed', async () => {
     const store = { id: 'store-id', nom: 'Optique', slug: 'optique' };
     const tx = {
+      parametresPlateforme: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       magasin: {
         create: jest.fn().mockResolvedValue(store),
         findUniqueOrThrow: jest.fn().mockResolvedValue(store),
@@ -207,6 +213,9 @@ describe('StoresService', () => {
     const first = { id: 'store-1', nom: 'Optique 1', slug: 'optique-1' };
     const second = { id: 'store-2', nom: 'Optique 2', slug: 'optique-2' };
     const tx = {
+      parametresPlateforme: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       magasin: {
         create: jest.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second),
         findUniqueOrThrow: jest.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second),
