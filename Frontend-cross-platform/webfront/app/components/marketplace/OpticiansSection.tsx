@@ -1,17 +1,14 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { ChevronLeft, ChevronRight, MapPin, MoveRight, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, MoveRight } from "lucide-react";
 import { DEMO_STORES, type Frame, type OpticianStore } from "../../data/marketplace-demo";
-import { getOpticians, getStoreHref } from "../../lib/marketplace";
+import { getOpticians } from "../../lib/marketplace";
 import { useReducedMotion } from "../../../lib/motion/useReducedMotion";
 import FilterBar from "./FilterBar";
-import type { OpticianView } from "./FilterBar";
 import OpticianCard from "./OpticianCard";
-import type { Optician } from "../../data/marketplace-demo";
 
 type Coordinates = { latitude: number; longitude: number };
 type Props = {
@@ -21,15 +18,6 @@ type Props = {
   isDemo: boolean;
   error?: string;
 };
-
-const OpticiansMap = dynamic(() => import("./OpticiansMap"), {
-  ssr: false,
-  loading: () => (
-    <div role="status" className="grid min-h-[380px] place-items-center rounded-2xl bg-[#eee7dc] text-sm text-stone-700 dark:bg-[#25221d] dark:text-stone-200">
-      Chargement de la carte…
-    </div>
-  ),
-});
 
 function distanceBetween(from: Coordinates, to: Coordinates) {
   const radians = (degrees: number) => degrees * Math.PI / 180;
@@ -59,42 +47,12 @@ function OpticianSkeleton({ reducedMotion }: { reducedMotion: boolean }) {
   );
 }
 
-function StorePreview({ store }: { store: Optician }) {
-  return (
-    <div className="optician-map-preview mt-4 flex flex-col gap-3 rounded-2xl border border-stone-300 bg-[#f9f6f0] p-4 sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:bg-[#211e19]">
-      <div className="min-w-0">
-        <p className="font-serif text-2xl italic text-stone-900 dark:text-[#f5f0e7]">{store.name}</p>
-        <p className="mt-1 flex items-center gap-1.5 text-sm text-stone-700 dark:text-stone-200">
-          <MapPin aria-hidden="true" className="h-4 w-4 shrink-0 text-accent" />
-          {[store.address, store.district, store.city].filter(Boolean).join(", ")}
-        </p>
-        {typeof store.rating === "number" && (
-          <p className="mt-1 flex items-center gap-1 text-sm text-stone-700 dark:text-stone-200">
-            <Star aria-hidden="true" className="h-4 w-4 fill-current text-accent" />
-            {store.rating.toFixed(1)}
-            {typeof store.reviewCount === "number" && ` · ${store.reviewCount} avis`}
-          </p>
-        )}
-      </div>
-      <Link
-        href={getStoreHref(store)}
-        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-stone-900 px-5 text-sm font-semibold text-[#f5f0e7] transition hover:bg-[#806334] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:bg-[#e1c795] dark:text-stone-950"
-      >
-        Voir la boutique
-        <MoveRight aria-hidden="true" className="h-4 w-4" />
-      </Link>
-    </div>
-  );
-}
-
 export default function OpticiansSection({ stores, frames, loading, isDemo, error }: Props) {
   const reducedMotion = useReducedMotion();
   const carouselRef = useRef<HTMLDivElement>(null);
   const [city, setCity] = useState("");
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
   const [locationMessage, setLocationMessage] = useState("");
-  const [view, setView] = useState<OpticianView>("list");
-  const [selectedId, setSelectedId] = useState("");
 
   const opticians = useMemo(() => {
     const mapped = getOpticians(stores, frames, isDemo);
@@ -135,8 +93,6 @@ export default function OpticiansSection({ stores, frames, loading, isDemo, erro
         return (distanceA ?? Number.MAX_SAFE_INTEGER) - (distanceB ?? Number.MAX_SAFE_INTEGER);
       });
   }, [city, coordinates, distances, opticians]);
-  const selectedOptician = filtered.find((store) => store.id === selectedId) ?? filtered[0];
-
   const requestLocation = () => {
     setLocationMessage("");
     if (!navigator.geolocation) {
@@ -195,14 +151,12 @@ export default function OpticiansSection({ stores, frames, loading, isDemo, erro
         count={filtered.length}
         loading={loading}
         nearbyActive={Boolean(coordinates)}
-        view={view}
         onCityChange={(value) => {
           setCity(value);
           setCoordinates(null);
           setLocationMessage("");
         }}
         onRequestLocation={requestLocation}
-        onViewChange={setView}
       />
 
       {locationMessage && (
@@ -216,8 +170,7 @@ export default function OpticiansSection({ stores, frames, loading, isDemo, erro
         </p>
       )}
 
-      {view === "list" ? (
-        <div className="mt-5">
+      <div className="mt-5">
           {!loading && filtered.length > 1 && (
             <div className="mb-3 flex justify-end gap-2">
               <button
@@ -273,28 +226,7 @@ export default function OpticiansSection({ stores, frames, loading, isDemo, erro
               Aucun opticien dans cette ville, essayez une autre ville.
             </p>
           )}
-        </div>
-      ) : (
-        <div className="mt-5">
-          {loading ? (
-            <div className={`h-[380px] rounded-2xl bg-stone-200 dark:bg-stone-700 ${reducedMotion ? "" : "animate-pulse"}`} />
-          ) : filtered.length ? (
-            <>
-              <OpticiansMap
-                stores={filtered}
-                selectedId={selectedOptician?.id}
-                center={coordinates}
-                onSelect={setSelectedId}
-              />
-              {selectedOptician && <StorePreview store={selectedOptician} />}
-            </>
-          ) : (
-            <p className="my-8 rounded-2xl border border-stone-300 bg-[#f9f6f0] px-5 py-10 text-center text-base text-stone-700 dark:border-white/10 dark:bg-[#211e19] dark:text-stone-200">
-              Aucun opticien dans cette ville, essayez une autre ville.
-            </p>
-          )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

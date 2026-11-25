@@ -6,13 +6,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Heart, Search, ShoppingBag } from "lucide-react";
 import AuthModal from "../Auth/AuthModal";
-import LogoWordmark from "../ui/LogoWordmark";
+import Logo from "../ui/Logo";
 import { useAuth as useAppAuth } from "@/lib/auth-context";
 import { useAuth as usePortalAuth } from "@/contexts/AuthContext";
 import type { AccountType, AuthUser } from "@/lib/auth";
 import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 
 const LINKS = [
+  { href: "/", label: "Accueil" },
   { href: "/lunettes", label: "Collection" },
   { href: "/opticiens", label: "Boutiques" },
   { href: "/conseiller", label: "Conseil IA" },
@@ -163,22 +164,27 @@ export default function Header() {
         className="site-header fixed inset-x-0 top-0 z-50 border-b border-black/10 bg-white text-[#241f19] shadow-sm transition-colors duration-500"
       >
         <div className="mx-auto flex h-20 max-w-[1600px] items-center justify-between gap-5 px-6 md:px-12">
-          <Link
-            href="/"
-            aria-label="Lunetty, accueil"
-            className="site-header-logo text-[40px] font-semibold tracking-[0.16em] uppercase"
-            onClick={() => setOpen(false)}
-          >
-            <LogoWordmark variant="dark" size="sm" />
-          </Link>
+          <Logo onClick={() => setOpen(false)} />
 
           <nav aria-label="Navigation principale" className="hidden lg:block">
             <ul className="flex items-center gap-4 text-base font-semibold tracking-[-0.2px] normal-case xl:gap-6 xl:text-lg">
               {LINKS.map((l) => (
                 <li key={l.href}>
-                  <Link href={l.href} className="group relative py-2 font-semibold">
+                  <Link
+                    href={l.href}
+                    aria-current={pathname === "/" && l.href === "/" ? "page" : undefined}
+                    className={`group relative py-2 font-semibold ${
+                      pathname === "/" && l.href === "/" ? "is-active" : ""
+                    }`}
+                  >
                     {l.label}
-                    <span className="absolute inset-x-0 bottom-0 h-px origin-left scale-x-0 bg-accent transition-transform duration-500 ease-lux group-hover:scale-x-100" />
+                    <span
+                      className={`absolute inset-x-0 bottom-0 h-px origin-left transition-transform duration-500 ease-lux ${
+                        pathname === "/" && l.href === "/"
+                          ? "scale-x-100 bg-[#b08d57]"
+                          : "scale-x-0 bg-accent group-hover:scale-x-100"
+                      }`}
+                    />
                   </Link>
                 </li>
               ))}
@@ -251,7 +257,12 @@ export default function Header() {
                     <Link
                       href={l.href}
                       onClick={() => setOpen(false)}
-                      className="font-serif text-5xl font-light"
+                      aria-current={pathname === "/" && l.href === "/" ? "page" : undefined}
+                      className={`font-serif text-5xl font-light ${
+                        pathname === "/" && l.href === "/"
+                          ? "is-active underline decoration-[#b08d57] decoration-1 underline-offset-8"
+                          : ""
+                      }`}
                     >
                       {l.label}
                     </Link>

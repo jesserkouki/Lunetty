@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DEMO_FRAMES, DEMO_STORES, type Frame, type OpticianStore } from "../../data/marketplace-demo";
 import { loadMarketplaceData } from "../../lib/marketplace";
 
@@ -23,14 +23,32 @@ const INITIAL_STATE: MarketplaceState = {
 export function useMarketplaceData() {
   const [state, setState] = useState(INITIAL_STATE);
 
+  const reload = useCallback(async () => {
+    setState((current) => ({ ...current, loading: true, error: undefined }));
+    try {
+      const data = await loadMarketplaceData();
+      setState({ ...data, loading: false });
+    } catch (cause: unknown) {
+      console.error("Impossible de charger le catalogue marketplace.", cause);
+      setState({
+        frames: DEMO_FRAMES,
+        stores: DEMO_STORES,
+        isDemo: true,
+        notice: "Catalogue de démonstration affiché : les données en direct sont indisponibles.",
+        error: "Les boutiques n’ont pas pu être chargées. La sélection de démonstration reste disponible.",
+        loading: false,
+      });
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
-    loadMarketplaceData()
-      .then((data) => {
+    const load = async () => {
+      try {
+        const data = await loadMarketplaceData();
         if (!active) return;
         setState({ ...data, loading: false });
-      })
-      .catch((cause: unknown) => {
+      } catch (cause: unknown) {
         if (!active) return;
         console.error("Impossible de charger le catalogue marketplace.", cause);
         setState({
@@ -41,12 +59,14 @@ export function useMarketplaceData() {
           error: "Les boutiques n’ont pas pu être chargées. La sélection de démonstration reste disponible.",
           loading: false,
         });
-      });
+      }
+    };
+    void load();
 
     return () => {
       active = false;
     };
   }, []);
 
-  return state;
+  return { ...state, reload };
 }
