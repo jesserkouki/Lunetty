@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Cinzel, Jost } from "next/font/google";
-import "leaflet/dist/leaflet.css";
 import "./globals.css";
 import "./workspace.css";
 import SmoothScroll from "./motion/SmoothScroll";
@@ -35,7 +34,7 @@ const sans = localFont({
 
 const jost = Jost({
   subsets: ["latin"],
-  weight: ["500", "600"],
+  weight: ["400", "500", "700", "800"],
   variable: "--font-jost",
   display: "swap",
 });

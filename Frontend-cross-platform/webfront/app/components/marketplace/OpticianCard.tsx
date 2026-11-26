@@ -58,6 +58,19 @@ function getInitials(name: string) {
     .toLocaleUpperCase("fr");
 }
 
+function getSpecialties(optician: Optician) {
+  const categories = optician.montures.map((frame) =>
+    frame.category.toLocaleLowerCase("fr").normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+  );
+  return [
+    { label: "Optique", matches: (category: string) => category.includes("optiq") },
+    { label: "Solaires", matches: (category: string) => category.includes("solaire") },
+    { label: "Enfants", matches: (category: string) => category.includes("enfant") || category.includes("junior") },
+  ]
+    .filter(({ matches }) => categories.some(matches))
+    .map(({ label }) => label);
+}
+
 function getDirectionsHref(optician: Optician) {
   const destination =
     typeof optician.latitude === "number" && typeof optician.longitude === "number"
@@ -108,7 +121,7 @@ function FrameCollage({ optician }: { optician: Optician }) {
 }
 
 function FrameThumbnails({ optician }: { optician: Optician }) {
-  const frames = optician.montures.slice(0, 3);
+  const frames = optician.montures.slice(0, 2);
   const remaining = Math.max(0, optician.listingCount - frames.length);
 
   return (
@@ -156,12 +169,12 @@ export default function OpticianCard({
     () => "[]",
   );
   const favorite = parseFavoriteIds(favoriteSnapshot).includes(optician.id);
-  const logoSource = optician.logo !== "/images/boutiques.svg" ? optician.logo : undefined;
-  const [failedLogoSource, setFailedLogoSource] = useState<string | null>(null);
   const [failedPhotoSource, setFailedPhotoSource] = useState<string | null>(null);
-  const logoUnavailable = !logoSource || logoSource === failedLogoSource;
   const tone = getFallbackTone(optician.id);
   const storeHref = getStoreHref(optician);
+  const photoSource = optician.photo ||
+    (optician.cover !== "/images/boutiques.svg" ? optician.cover : undefined);
+  const specialties = getSpecialties(optician);
 
   const toggleFavorite = () => {
     try {
@@ -177,30 +190,30 @@ export default function OpticianCard({
   };
 
   return (
-    <article className="group relative h-full min-w-0">
+    <article className="group relative h-full min-w-0 transition-transform duration-300 hover:-translate-y-[6px]">
       <TiltCard
         className="h-full"
         maxTiltDegrees={6}
         touchEffect={false}
       >
-        <div className="relative flex h-full flex-col overflow-hidden rounded-[1.4rem] border border-stone-200/90 bg-[#f9f6f0] p-3.5 shadow-[0_12px_36px_rgba(54,41,26,0.1)] transition-[box-shadow,transform] duration-500 group-hover:shadow-[0_22px_48px_rgba(54,41,26,0.18)] dark:border-white/10 dark:bg-[#211e19] sm:p-4">
+        <div className="relative flex h-full flex-col overflow-hidden rounded-[28px] border border-lunetty-gold/35 bg-lunetty-surface p-4 shadow-[0_12px_36px_rgba(54,41,26,0.1)] transition-shadow duration-300 group-hover:shadow-[0_22px_48px_rgba(54,41,26,0.2)] sm:p-5">
           <Link
             href={storeHref}
             aria-label={`Voir la boutique ${optician.name}`}
-            className="absolute inset-0 z-10 rounded-[1.4rem] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+            className="absolute inset-0 z-10 rounded-[28px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
           >
             <span className="sr-only">Voir la boutique {optician.name}</span>
           </Link>
 
-          <div className="pointer-events-none relative aspect-[4/3] overflow-hidden rounded-[1.05rem] bg-[#e7dfd1] dark:bg-[#373128]">
-            {optician.photo && optician.photo !== failedPhotoSource ? (
+          <div className="pointer-events-none relative aspect-[4/3] overflow-hidden rounded-[28px] bg-lunetty-cream">
+            {photoSource && photoSource !== failedPhotoSource ? (
               <Image
-                src={optician.photo}
+                src={photoSource}
                 alt={optician.photoAlt || `Photo de la boutique ${optician.name}`}
                 fill
                 unoptimized
                 sizes="(max-width: 640px) 68vw, (max-width: 1024px) 45vw, 30vw"
-                onError={() => setFailedPhotoSource(optician.photo ?? "")}
+                onError={() => setFailedPhotoSource(photoSource)}
                 className="object-cover motion-safe:transition-transform motion-safe:duration-700 motion-safe:group-hover:scale-[1.04]"
               />
             ) : (
@@ -216,7 +229,7 @@ export default function OpticianCard({
                 : `Ajouter ${optician.name} aux boutiques favorites`}
               aria-pressed={favorite}
               onClick={toggleFavorite}
-              className="pointer-events-auto absolute right-3 top-3 z-40 grid h-11 w-11 place-items-center rounded-full border border-white/75 bg-[#f9f6f0]/95 text-stone-900 shadow-sm transition hover:scale-105 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900"
+              className="pointer-events-auto absolute right-3 top-3 z-40 grid h-11 w-11 place-items-center rounded-full border border-white/75 bg-lunetty-surface/80 text-stone-900 shadow-sm backdrop-blur-md transition hover:scale-105 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900"
             >
               <Heart aria-hidden="true" className={`h-5 w-5 ${favorite ? "fill-current text-[#9b564f]" : ""}`} />
             </button>
@@ -224,30 +237,18 @@ export default function OpticianCard({
 
           <FrameThumbnails optician={optician} />
 
-          <div className="pointer-events-none relative z-20 mt-4 flex items-start gap-3">
+          <div className="pointer-events-none relative z-20 mt-4 flex min-w-0 items-start gap-3">
             <div
-              className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full border border-stone-200 bg-[#eee7dc] text-sm font-semibold text-stone-800 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-              style={{ backgroundColor: logoUnavailable ? tone[0] : undefined }}
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-full border border-lunetty-gold/40 text-sm font-semibold text-lunetty-ink"
+              style={{ backgroundColor: tone[0] }}
             >
-              {logoSource && logoSource !== failedLogoSource ? (
-                <Image
-                  src={logoSource}
-                  alt=""
-                  fill
-                  unoptimized
-                  sizes="48px"
-                  onError={() => setFailedLogoSource(logoSource)}
-                  className="object-cover"
-                />
-              ) : (
-                <span aria-hidden="true">{getInitials(optician.name)}</span>
-              )}
+              <span aria-hidden="true">{getInitials(optician.name)}</span>
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-serif text-[1.55rem] italic leading-tight text-stone-900 dark:text-[#f5f0e7]">
+              <h3 className="break-words font-serif text-[1.55rem] italic leading-tight text-lunetty-ink">
                 {optician.name}
               </h3>
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-stone-700 dark:text-stone-200">
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-lunetty-muted">
                 {typeof optician.rating === "number" && (
                   <span className="inline-flex items-center gap-1 font-semibold">
                     <Star aria-hidden="true" className="h-4 w-4 fill-current text-accent" />
@@ -262,13 +263,18 @@ export default function OpticianCard({
           </div>
 
           <div className="pointer-events-none relative z-20 mt-3 flex flex-wrap gap-2 text-sm font-semibold">
+            {specialties.map((specialty) => (
+              <span key={specialty} className="rounded-full border border-lunetty-gold/35 bg-lunetty-cream px-3 py-1.5 text-lunetty-ink">
+                {specialty}
+              </span>
+            ))}
             {typeof optician.independent === "boolean" && (
-              <span className="rounded-full bg-[#e8dfd0] px-3 py-1.5 text-stone-800 dark:bg-stone-700 dark:text-stone-100">
+              <span className="rounded-full bg-[#e8dfd0] px-3 py-1.5 text-stone-800">
                 {optician.independent ? "Indépendant" : "Enseigne"}
               </span>
             )}
             {optician.inStoreTryOn && (
-              <span className="rounded-full border border-stone-300 px-3 py-1.5 text-stone-800 dark:border-stone-600 dark:text-stone-100">
+              <span className="rounded-full border border-stone-300 px-3 py-1.5 text-stone-800">
                 Essayage en magasin
               </span>
             )}
@@ -279,25 +285,26 @@ export default function OpticianCard({
             )}
           </div>
 
-          <div className="pointer-events-none relative z-20 mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-stone-700 dark:text-stone-200">
-            <p className="flex min-w-0 items-center gap-1.5">
-              <MapPin aria-hidden="true" className="h-4 w-4 shrink-0 text-accent" />
-              <span className="truncate">{[optician.district, optician.city].filter(Boolean).join(", ")}</span>
-            </p>
+          <div className="pointer-events-none relative z-20 mt-3 flex min-w-0 items-start gap-2 text-sm text-lunetty-muted">
+            <MapPin aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+            <div className="min-w-0 break-words leading-5">
+              {optician.address && <p>{optician.address}</p>}
+              <p>{[optician.district, optician.city].filter(Boolean).join(", ")}</p>
+            </div>
             {typeof distanceKm === "number" && (
-              <p className="shrink-0 text-base font-semibold text-stone-900 dark:text-[#f5f0e7]">
+              <p className="ml-auto shrink-0 text-sm font-semibold text-lunetty-ink">
                 {new Intl.NumberFormat("fr-TN", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(distanceKm)} km
               </p>
             )}
           </div>
-          <p className="pointer-events-none relative z-20 mt-1 text-sm font-medium text-stone-700 dark:text-stone-200">
+          <p className="pointer-events-none relative z-20 mt-2 text-sm font-medium text-lunetty-muted">
             {optician.listingCount} monture{optician.listingCount === 1 ? "" : "s"}
           </p>
 
           <div className="pointer-events-auto relative z-30 mt-5 grid grid-cols-2 gap-2">
             <Link
               href={storeHref}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-stone-900 px-3 text-sm font-semibold text-[#f5f0e7] transition hover:bg-[#806334] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:bg-[#e1c795] dark:text-stone-950 dark:hover:bg-[#f1dcb3]"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-lunetty-ink px-3 text-sm font-semibold text-white transition hover:bg-lunetty-gold-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:bg-lunetty-gold dark:text-lunetty-ink"
             >
               Voir la boutique
               <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
@@ -305,8 +312,8 @@ export default function OpticianCard({
             <a
               href={getDirectionsHref(optician)}
               target="_blank"
-              rel="noreferrer"
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-stone-400 px-3 text-sm font-semibold text-stone-900 transition hover:bg-[#eee7dc] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:border-stone-600 dark:text-[#f5f0e7] dark:hover:bg-stone-800"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-lunetty-gold/45 px-3 text-sm font-semibold text-lunetty-ink transition hover:bg-lunetty-cream focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <Navigation aria-hidden="true" className="h-4 w-4" />
               Itinéraire

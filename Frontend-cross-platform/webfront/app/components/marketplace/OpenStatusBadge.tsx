@@ -13,14 +13,14 @@ const DAYS = [
   ["samedi", "sam"],
 ];
 
-type Schedule = {
+export type Schedule = {
   openDay: number;
   closeDay: number;
   opensAt: number;
   closesAt: number;
 };
 
-function parseSchedule(hours: string): Schedule | undefined {
+export function parseSchedule(hours: string): Schedule | undefined {
   const timeMatch = /(\d{1,2})[:h](\d{2})\s*[–-]\s*(\d{1,2})[:h](\d{2})/i.exec(hours);
   if (!timeMatch || timeMatch.index === undefined) return undefined;
 
@@ -52,20 +52,20 @@ function parseSchedule(hours: string): Schedule | undefined {
   };
 }
 
-function isOpenDay(day: number, schedule: Schedule) {
+export function isOpenDay(day: number, schedule: Schedule) {
   if (schedule.openDay <= schedule.closeDay) {
     return day >= schedule.openDay && day <= schedule.closeDay;
   }
   return day >= schedule.openDay || day <= schedule.closeDay;
 }
 
-function formatTime(minutes: number) {
+export function formatTime(minutes: number) {
   const hour = Math.floor(minutes / 60);
   const minute = minutes % 60;
   return minute ? `${hour}h${String(minute).padStart(2, "0")}` : `${hour}h`;
 }
 
-function getStatus(hours: string, now: Date) {
+export function getStoreOpenStatus(hours: string, now: Date) {
   const schedule = parseSchedule(hours);
   if (!schedule) return { label: "Horaires à confirmer", open: null };
 
@@ -107,17 +107,17 @@ export default function OpenStatusBadge({ hours }: { hours: string }) {
     return () => window.clearInterval(timer);
   }, []);
 
-  const status = now ? getStatus(hours, now) : { label: "Horaires à confirmer", open: null };
+  const status = now ? getStoreOpenStatus(hours, now) : { label: "Horaires à confirmer", open: null };
   const color = status.open === true
-    ? "bg-[#214532] text-white"
+    ? "border-white/45 bg-[#214532]/85 text-white"
     : status.open === false
-      ? "bg-[#f5f0e7] text-stone-900"
-      : "bg-stone-900/85 text-white";
+      ? "border-white/65 bg-[#f5f0e7]/85 text-stone-900"
+      : "border-white/45 bg-stone-900/75 text-white";
 
   return (
     <span
       aria-label={status.label}
-      className={`inline-flex min-h-9 items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold shadow-sm backdrop-blur ${color}`}
+      className={`inline-flex min-h-9 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold shadow-sm backdrop-blur-md ${color}`}
     >
       <Clock3 aria-hidden="true" className="h-4 w-4 shrink-0" />
       {status.label}

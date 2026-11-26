@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import LogoWordmark from "../ui/LogoWordmark";
+import Logo from "../ui/Logo";
 
 export default function Footer() {
   const pathname = usePathname();
@@ -12,11 +12,11 @@ export default function Footer() {
   }
 
   return (
-    <footer className="border-t border-line px-6 py-16 md:px-12">
+    <footer className="footer--dark border-t border-line px-6 py-16 md:px-12">
       <div className="mx-auto flex max-w-[1600px] flex-col gap-12 md:flex-row md:items-end md:justify-between">
-        <div>
-          <LogoWordmark href="/" variant="auto" size="md" />
-          <p className="mt-4 max-w-sm text-sm leading-7 text-muted">
+        <div className="footer__brand flex flex-col items-start gap-3">
+          <Logo />
+          <p className="max-w-sm text-sm leading-7 text-muted">
             L&apos;optique, autrement. Montures, verres et opticiens réunis
             dans une même expérience.
           </p>

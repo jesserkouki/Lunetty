@@ -1,8 +1,6 @@
 "use client";
 
-import { LocateFixed, MapPin, Map, List } from "lucide-react";
-
-export type OpticianView = "list" | "map";
+import { LocateFixed, MapPin } from "lucide-react";
 
 type Props = {
   cities: string[];
@@ -10,10 +8,8 @@ type Props = {
   count: number;
   loading: boolean;
   nearbyActive: boolean;
-  view: OpticianView;
   onCityChange: (city: string) => void;
   onRequestLocation: () => void;
-  onViewChange: (view: OpticianView) => void;
 };
 
 const control =
@@ -25,10 +21,8 @@ export default function FilterBar({
   count,
   loading,
   nearbyActive,
-  view,
   onCityChange,
   onRequestLocation,
-  onViewChange,
 }: Props) {
   return (
     <div className="flex flex-col gap-4 border-y border-stone-300/80 py-5 dark:border-white/15 lg:flex-row lg:items-center lg:justify-between">
@@ -69,34 +63,6 @@ export default function FilterBar({
         </p>
       </div>
 
-      <div aria-label="Type d’affichage" className="inline-flex w-fit rounded-full border border-stone-300 bg-[#f9f6f0] p-1 dark:border-stone-600 dark:bg-[#211e19]">
-        <button
-          type="button"
-          aria-pressed={view === "list"}
-          onClick={() => onViewChange("list")}
-          className={`${control} min-h-10 border-transparent px-4 ${
-            view === "list"
-              ? "bg-stone-900 text-[#f5f0e7] dark:bg-[#e1c795] dark:text-stone-950"
-              : "text-stone-700 hover:bg-[#eee7dc] dark:text-stone-200 dark:hover:bg-stone-800"
-          }`}
-        >
-          <List aria-hidden="true" className="h-4 w-4" />
-          Liste
-        </button>
-        <button
-          type="button"
-          aria-pressed={view === "map"}
-          onClick={() => onViewChange("map")}
-          className={`${control} min-h-10 border-transparent px-4 ${
-            view === "map"
-              ? "bg-stone-900 text-[#f5f0e7] dark:bg-[#e1c795] dark:text-stone-950"
-              : "text-stone-700 hover:bg-[#eee7dc] dark:text-stone-200 dark:hover:bg-stone-800"
-          }`}
-        >
-          <Map aria-hidden="true" className="h-4 w-4" />
-          Carte
-        </button>
-      </div>
     </div>
   );
 }
