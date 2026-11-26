@@ -5,20 +5,18 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { ChevronLeft, ChevronRight, MapPin, MoveRight, Star } from "lucide-react";
-import { DEMO_STORES, type Frame, type OpticianStore } from "../../data/marketplace-demo";
+import type { Frame, OpticianStore, Optician } from "../../lib/marketplace-types";
 import { getOpticians, getStoreHref } from "../../lib/marketplace";
 import { useReducedMotion } from "../../../lib/motion/useReducedMotion";
 import FilterBar from "./FilterBar";
 import type { OpticianView } from "./FilterBar";
 import OpticianCard from "./OpticianCard";
-import type { Optician } from "../../data/marketplace-demo";
 
 type Coordinates = { latitude: number; longitude: number };
 type Props = {
   stores: OpticianStore[];
   frames: Frame[];
   loading: boolean;
-  isDemo: boolean;
   error?: string;
 };
 
@@ -87,7 +85,7 @@ function StorePreview({ store }: { store: Optician }) {
   );
 }
 
-export default function OpticiansSection({ stores, frames, loading, isDemo, error }: Props) {
+export default function OpticiansSection({ stores, frames, loading, error }: Props) {
   const reducedMotion = useReducedMotion();
   const carouselRef = useRef<HTMLDivElement>(null);
   const [city, setCity] = useState("");
@@ -97,7 +95,7 @@ export default function OpticiansSection({ stores, frames, loading, isDemo, erro
   const [selectedId, setSelectedId] = useState("");
 
   const opticians = useMemo(() => {
-    const mapped = getOpticians(stores, frames, isDemo);
+    const mapped = getOpticians(stores, frames);
     const photoCounts = new Map<string, number>();
     mapped.forEach((store) => {
       if (store.photo) photoCounts.set(store.photo, (photoCounts.get(store.photo) ?? 0) + 1);
@@ -107,9 +105,9 @@ export default function OpticiansSection({ stores, frames, loading, isDemo, erro
         ? { ...store, photo: undefined }
         : store
     ));
-  }, [frames, isDemo, stores]);
+  }, [frames, stores]);
   const cities = useMemo(
-    () => [...new Set([...opticians, ...DEMO_STORES].map((store) => store.city).filter(Boolean))].sort(),
+    () => [...new Set(opticians.map((store) => store.city).filter(Boolean))].sort(),
     [opticians],
   );
   const distances = useMemo(() => {

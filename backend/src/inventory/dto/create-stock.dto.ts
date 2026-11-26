@@ -14,6 +14,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -128,4 +129,15 @@ export class CreateStockDto {
   @IsInt()
   @Min(0)
   seuil_reapprovisionnement = 0;
+
+  @ApiProperty({
+    minimum: 0.001,
+    maximum: 999999999.999,
+    description: 'Selling price per unit in the store currency',
+  })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0.001)
+  @Max(999999999.999)
+  prix_vente!: number;
 }

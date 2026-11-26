@@ -265,13 +265,38 @@ export function WorkspacePage({
             }
             break;
           case "products": {
-            const [catalog, listings] = await Promise.all([
-              resourceId
+            const [catalogResult, listingsResult, inventoryResult] =
+            await Promise.allSettled([
+            resourceId
                 ? Promise.all([productsService.find(resourceId), productsService.variants(resourceId)])
                   : productsService.list(page),
                 storeId ? storesService.managedListings(storeId, page) : Promise.resolve(null),
+              storeId ? inventoryService.list(storeId, page) : Promise.resolve(null),
             ]);
-            setData({ catalog, listings });
+            setData({
+            catalog:
+              catalogResult.status === "fulfilled" ? catalogResult.value : null,
+            catalogError:
+              catalogResult.status === "rejected"
+                ? messageOf(catalogResult.reason)
+                : "",
+            listings:
+              listingsResult.status === "fulfilled"
+                ? listingsResult.value
+                : null,
+            listingsError:
+              listingsResult.status === "rejected"
+                ? messageOf(listingsResult.reason)
+                : "",
+            inventory:
+              inventoryResult.status === "fulfilled"
+                ? inventoryResult.value
+                : null,
+            inventoryError:
+              inventoryResult.status === "rejected"
+                ? messageOf(inventoryResult.reason)
+                : "",
+            });
             break;
           }
           case "inventory": {
@@ -387,6 +412,11 @@ export function WorkspacePage({
       throw reason;
     }
   }, []);
+  const readStockFrameImage = useCallback(
+    (imageId: string) =>
+      inventoryService.readFrameImage(auth.storeId, imageId),
+    [auth.storeId],
+  );
 
   const title = useMemo(
     () => {
@@ -1073,9 +1103,37 @@ export function WorkspacePage({
         return (
           <OpticianLocations
             locationsData={data.locations}
+            locationTypesData={data.locationTypes}
             storeId={auth.storeId}
-            onCreateLocation={(values) => run(() => storesService.createLocation(auth.storeId, values), "Emplacement créé.")}
+            onCreateLocations={async (inputs) => {
+              try {
+                await storesService.createLocations(auth.storeId, inputs);
+              } catch (reason) {
+                if (
+                  reason instanceof ApiError &&
+                  typeof reason.details === "object" &&
+                  reason.details !== null &&
+                  "createdCount" in reason.details
+                ) {
+                  setVersion((previous) => previous + 1);
+                }
+                throw reason;
+              }
+              setNotice(
+                inputs.length === 1
+                  ? "Emplacement créé."
+                  : `${inputs.length} emplacements créés.`,
+              );
+              setVersion((previous) => previous + 1);
+            }}
+            onCreateLocationType={async (input) => {
+              const type = await storesService.createLocationType(auth.storeId, input);
+              setNotice("Type d’emplacement créé.");
+              setVersion((previous) => previous + 1);
+              return type;
+            }}
             onUpdateLocation={(locId, values) => run(() => storesService.updateLocation(auth.storeId, locId, values), "Emplacement mis à jour.")}
+            onDeleteLocation={(locId) => run(() => storesService.deleteLocation(auth.storeId, locId), "Emplacement supprimé.")}
           />
         );
 
@@ -1090,6 +1148,16 @@ export function WorkspacePage({
             onAddListingVariant={(listingId, values) =>
               run(() => storesService.addListingVariant(auth.storeId, listingId, values), "Variante tarifée ajoutée.")
             }
+            inventoryData={data.inventory}
+            inventoryError={stringOf(data.inventoryError)}
+            currency={stringOf(recordOf(data.inventory).currency)}
+            onReadFrameImage={readStockFrameImage}
+            onUpdateStock={(stockId, values) =>
+              run(
+                () => inventoryService.update(auth.storeId, stockId, values),
+                "Prix ou visibilité du stock mis à jour.",
+              )
+            }
           />
         );
 
@@ -1099,6 +1167,7 @@ export function WorkspacePage({
             inventoryData={data.inventory}
             locationsData={data.locations}
             locationTypesData={data.locationTypes}
+            currency={stringOf(recordOf(data.inventory).currency)}
             onApplyMovement={(stockId, input) =>
               run(() => inventoryService.createMovement(auth.storeId, stockId, input), "Mouvement de stock enregistré.")
             }
@@ -1117,9 +1186,7 @@ export function WorkspacePage({
             onUploadFrameImage={(image, input) =>
               inventoryService.uploadFrameImage(auth.storeId, image, input)
             }
-            onReadFrameImage={(imageId) =>
-              inventoryService.readFrameImage(auth.storeId, imageId)
-            }
+            onReadFrameImage={readStockFrameImage}
             onDeleteFrameImage={async (imageId) => {
               await inventoryService.deleteFrameImage(auth.storeId, imageId);
             }}
@@ -1406,7 +1473,7 @@ function getPaginatedValue(
   }
   switch (section) {
     case "members": return data.members;
-    case "products": return data.listings;
+    case "products": return data.inventory;
     case "inventory": return data.inventory;
     case "appointments": return data.appointments;
     case "customers": return data.customers;

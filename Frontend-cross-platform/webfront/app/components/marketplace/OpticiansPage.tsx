@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { LocateFixed } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { DEMO_STORES, type OpticianStore } from "../../data/marketplace-demo";
+import type { OpticianStore } from "../../lib/marketplace-types";
 import { StoreCard } from "./MarketplaceUI";
 import { useMarketplaceData } from "./useMarketplaceData";
 
@@ -20,8 +20,7 @@ function getDistance(from: Coordinates, store: OpticianStore) {
 
 export default function OpticiansPage() {
   const searchParams = useSearchParams();
-  const { stores: apiStores, isDemo, notice } = useMarketplaceData();
-  const stores = apiStores.some((store) => store.city !== "Ville non renseignée") ? apiStores : DEMO_STORES;
+  const { stores, loading, error, notice } = useMarketplaceData();
   const [query, setQuery] = useState("");
   const [city, setCity] = useState("");
   const [independentOnly, setIndependentOnly] = useState(
@@ -73,7 +72,7 @@ export default function OpticiansPage() {
         <h1 className="font-serif text-5xl sm:text-6xl">Nos opticiens</h1>
         <p className="mt-4 max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-300">Des maisons optiques partenaires pour essayer, ajuster et découvrir votre prochaine monture.</p>
 
-        {(notice || isDemo) && <p role="status" className="mt-8 border border-stone-300 bg-[#eee7dc] px-4 py-3 text-sm text-stone-700 dark:border-white/10 dark:bg-[#25221d] dark:text-stone-200">{notice ?? "Liste de boutiques de démonstration affichée."}</p>}
+        {(notice || error) && <p role="status" className="mt-8 border border-stone-300 bg-[#eee7dc] px-4 py-3 text-sm text-stone-700 dark:border-white/10 dark:bg-[#25221d] dark:text-stone-200">{error ?? notice}</p>}
 
         <div className="my-8 grid gap-4 border-y border-stone-300 py-5 dark:border-white/10 md:grid-cols-[minmax(0,1fr)_220px_auto_auto] md:items-end">
           <label>
@@ -98,7 +97,9 @@ export default function OpticiansPage() {
         </div>
         {locationMessage && <p role="status" className="mb-6 text-sm text-stone-600 dark:text-stone-300">{locationMessage}</p>}
         <p className="mb-6 text-sm text-stone-600 dark:text-stone-300">{filtered.length} boutique{filtered.length === 1 ? "" : "s"}</p>
-        {filtered.length ? (
+        {loading ? (
+          <p role="status" className="border-y border-stone-300 py-12 text-center text-stone-600 dark:border-white/10 dark:text-stone-300">Chargement des boutiques…</p>
+        ) : filtered.length ? (
           <div className="grid gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map(({ store, distance }) => <StoreCard key={store.id} store={store} distanceKm={distance} />)}
           </div>

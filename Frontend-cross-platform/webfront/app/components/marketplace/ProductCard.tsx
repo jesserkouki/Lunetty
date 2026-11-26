@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useState, useSyncExternalStore } from "react";
 import { Heart, MapPin } from "lucide-react";
-import type { Frame, FrameColorOption } from "../../data/marketplace-demo";
+import type { Frame, FrameColorOption } from "../../lib/marketplace-types";
 import { getFrameHref } from "../../lib/marketplace";
 import { useReducedMotion } from "../../../lib/motion/useReducedMotion";
 import ColorSwatches from "./ColorSwatches";

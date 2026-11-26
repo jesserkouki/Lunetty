@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
-import type { Optician } from "../../data/marketplace-demo";
+import type { Optician } from "../../lib/marketplace-types";
 import { getStoreHref } from "../../lib/marketplace";
 
 type Coordinates = { latitude: number; longitude: number };

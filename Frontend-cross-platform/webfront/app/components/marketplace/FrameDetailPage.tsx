@@ -6,7 +6,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { MapPin, ShieldCheck } from "lucide-react";
 import { useParams } from "next/navigation";
-import { DEMO_FRAMES, DEMO_STORES } from "../../data/marketplace-demo";
 import { findFrame, findStore, formatPrice, getStoreHref } from "../../lib/marketplace";
 import { FrameCard } from "./MarketplaceUI";
 import { useMarketplaceData } from "./useMarketplaceData";
@@ -19,13 +18,13 @@ export default function FrameDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const reducedMotion = useReducedMotion();
-  const { frames, stores } = useMarketplaceData();
-  const frame = findFrame(frames, id) ?? findFrame(DEMO_FRAMES, id);
+  const { frames, stores, loading, error } = useMarketplaceData();
+  const frame = findFrame(frames, id);
   const viewerOwner = `detail:${frame?.id ?? id}`;
   const ownsViewer = useViewerCanvas(viewerOwner);
   const [readyViewer, setReadyViewer] = useState<string | null>(null);
   const store = frame
-    ? findStore(stores, frame.storeId) ?? findStore(DEMO_STORES, frame.storeId)
+    ? findStore(stores, frame.storeId)
     : undefined;
 
   useEffect(() => {
@@ -60,12 +59,15 @@ export default function FrameDetailPage() {
     )
     .slice(0, 4);
 
+  if (!frame && loading) {
+    return <main id="contenu" className="min-h-screen bg-[#f5f0e7] px-5 pb-20 pt-32 text-center text-stone-700 dark:bg-[#181613] dark:text-[#f5f0e7]" role="status">Chargement de la monture…</main>;
+  }
   if (!frame) {
     return (
       <main id="contenu" className="min-h-screen bg-[#f5f0e7] px-5 pb-20 pt-32 text-stone-900 dark:bg-[#181613] dark:text-[#f5f0e7]">
         <div className="mx-auto max-w-3xl py-20 text-center">
           <h1 className="font-serif text-4xl">Monture introuvable</h1>
-          <p className="mt-4 text-sm text-stone-600 dark:text-stone-300">Cette monture n’est plus disponible ou son adresse a changé.</p>
+          <p className="mt-4 text-sm text-stone-600 dark:text-stone-300">{error ?? "Cette monture n’est plus disponible ou son adresse a changé."}</p>
           <Link className="mt-8 inline-flex border border-stone-400 px-5 py-3 text-sm font-semibold hover:bg-[#eee7dc] dark:border-stone-600 dark:hover:bg-stone-800" href="/lunettes">Retour au catalogue</Link>
         </div>
       </main>

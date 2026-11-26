@@ -170,6 +170,7 @@ enum TypeArticleStock {
   VERRE_VUE    @map("PRESCRIPTION_GLASSES")
   VERRE_SOLEIL @map("SUN_GLASSES")
   MONTURE      @map("FRAME")
+  LENTILLE     @map("CONTACT_LENS")
 
   @@map("InventoryItemType")
 }
@@ -719,6 +720,8 @@ model Stock {
   quantite_disponible       Int                      @default(0) @map("quantity_on_hand")
   quantite_reservee         Int                      @default(0) @map("quantity_reserved")
   seuil_reapprovisionnement Int                      @default(0) @map("reorder_level")
+  prix_vente                Decimal?                 @map("selling_price") @db.Decimal(12, 3)
+  est_publie                Boolean                  @default(false) @map("is_published")
   cree_le                   DateTime                 @default(now()) @db.Timestamptz(6)
   modifie_le                DateTime                 @updatedAt @db.Timestamptz(6)
   variante_annonce          VarianteAnnonceMagasin?  @relation(fields: [storeListingVariantId], references: [id], onDelete: Cascade)

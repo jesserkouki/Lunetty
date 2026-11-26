@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FrameCard } from "./MarketplaceUI";
 import { useMarketplaceData } from "./useMarketplaceData";
-import type { Frame } from "../../data/marketplace-demo";
+import type { Frame } from "../../lib/marketplace-types";
 
 type Filters = {
   query: string;
@@ -69,7 +69,7 @@ function sortFrames(frames: Frame[], sort: string, query: string) {
 }
 
 export default function CataloguePage() {
-  const { frames, isDemo, notice } = useMarketplaceData();
+  const { frames, loading, notice, error } = useMarketplaceData();
   const [filters, setFilters] = useState(EMPTY_FILTERS);
 
   useEffect(() => {
@@ -134,9 +134,9 @@ export default function CataloguePage() {
           </label>
         </div>
 
-        {(notice || isDemo) && (
+        {(notice || error) && (
           <p role="status" className="mb-6 border border-stone-300 bg-[#eee7dc] px-4 py-3 text-sm text-stone-700 dark:border-white/10 dark:bg-[#25221d] dark:text-stone-200">
-            {notice ?? "Catalogue de démonstration affiché."}
+            {error ?? notice}
           </p>
         )}
 
@@ -178,12 +178,14 @@ export default function CataloguePage() {
         <div className="mb-6 flex items-baseline justify-between">
           <p className="text-sm text-stone-600 dark:text-stone-300">{visibleFrames.length} monture{visibleFrames.length === 1 ? "" : "s"}</p>
         </div>
-        {visibleFrames.length ? (
+        {loading ? (
+          <p role="status" className="border-y border-stone-300 py-12 text-center text-stone-600 dark:border-white/10 dark:text-stone-300">Chargement des montures publiées…</p>
+        ) : visibleFrames.length ? (
           <div className="grid gap-x-5 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visibleFrames.map((frame) => <FrameCard key={frame.id} frame={frame} badge={frame.sponsored ? "Sponsorisé" : undefined} />)}
           </div>
         ) : (
-          <p className="border-y border-stone-300 py-12 text-center text-stone-600 dark:border-white/10 dark:text-stone-300">Aucune monture ne correspond à ces filtres.</p>
+          <p className="border-y border-stone-300 py-12 text-center text-stone-600 dark:border-white/10 dark:text-stone-300">{frames.length ? "Aucune monture ne correspond à ces filtres." : "Aucune monture n’est publiée pour le moment."}</p>
         )}
       </div>
     </main>

@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Phone } from "lucide-react";
 import { useParams } from "next/navigation";
-import { DEMO_STORES } from "../../data/marketplace-demo";
 import { findStore } from "../../lib/marketplace";
 import { FrameCard } from "./MarketplaceUI";
 import { useMarketplaceData } from "./useMarketplaceData";
@@ -12,18 +11,21 @@ import { useMarketplaceData } from "./useMarketplaceData";
 export default function OpticianShowcasePage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
-  const { frames, stores } = useMarketplaceData();
-  const store = findStore(stores, id) ?? findStore(DEMO_STORES, id);
+  const { frames, stores, loading, error } = useMarketplaceData();
+  const store = findStore(stores, id);
   const storeFrames = store
     ? frames.filter((frame) => frame.storeId === store.id)
     : [];
 
+  if (!store && loading) {
+    return <main id="contenu" className="min-h-screen bg-[#f5f0e7] px-5 pb-20 pt-32 text-center text-stone-700 dark:bg-[#181613] dark:text-[#f5f0e7]" role="status">Chargement de la boutique…</main>;
+  }
   if (!store) {
     return (
       <main id="contenu" className="min-h-screen bg-[#f5f0e7] px-5 pb-20 pt-32 text-stone-900 dark:bg-[#181613] dark:text-[#f5f0e7]">
         <div className="mx-auto max-w-3xl py-20 text-center">
           <h1 className="font-serif text-4xl">Boutique introuvable</h1>
-          <p className="mt-4 text-sm text-stone-600 dark:text-stone-300">Cette vitrine n’est pas disponible pour le moment.</p>
+          <p className="mt-4 text-sm text-stone-600 dark:text-stone-300">{error ?? "Cette vitrine n’est pas disponible pour le moment."}</p>
           <Link className="mt-8 inline-flex border border-stone-400 px-5 py-3 text-sm font-semibold hover:bg-[#eee7dc] dark:border-stone-600 dark:hover:bg-stone-800" href="/opticiens">Voir les opticiens</Link>
         </div>
       </main>

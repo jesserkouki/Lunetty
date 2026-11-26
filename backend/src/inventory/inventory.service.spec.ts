@@ -172,6 +172,7 @@ describe('InventoryService', () => {
         traitement_verre: TraitementVerreStock.BLEU,
         puissance_droite: -2,
         puissance_gauche: -1.5,
+        prix_vente: 120,
       }),
     ).resolves.toEqual(stock);
 
@@ -207,6 +208,7 @@ describe('InventoryService', () => {
         conception_verre: ConceptionVerreStock.PROGRESSIF,
         traitement_verre: TraitementVerreStock.PHOTO,
         puissance_droite: 1,
+        prix_vente: 150,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.emplacementMagasin.findFirst).not.toHaveBeenCalled();
@@ -228,6 +230,7 @@ describe('InventoryService', () => {
         type_article: TypeArticleStock.MONTURE,
         marque_reference: 'Monture test',
         public_cible: PublicCible.ENFANT,
+        prix_vente: 200,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.emplacementMagasin.findFirst).not.toHaveBeenCalled();
@@ -283,6 +286,7 @@ describe('InventoryService', () => {
         catalogueImageId: 'catalogue-image-1',
         quantite_disponible: 0,
         seuil_reapprovisionnement: 0,
+        prix_vente: 220,
       }),
     ).resolves.toEqual(stock);
 
@@ -405,6 +409,7 @@ describe('InventoryService', () => {
         catalogueImageId: 'catalogue-image-1',
         quantite_disponible: 0,
         seuil_reapprovisionnement: 0,
+        prix_vente: 220,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -445,6 +450,7 @@ describe('InventoryService', () => {
       age_monture: AgeMontureStock.ADULTE,
       taille_monture: '52-18',
       frameImageUploadId: 'frame-image-id',
+      prix_vente: 180,
     };
 
     await service.create('owner-id', 'store-1', input);
@@ -521,6 +527,7 @@ describe('InventoryService', () => {
       catalogueProductId: 'catalogue-p1',
       catalogueVariantId: 'catalogue-v1',
       catalogueImageId: 'catalogue-image-1',
+      prix_vente: 220,
     });
     const second = await createForShop('store-2').create('owner-2', 'store-2', {
       emplacement_id: 'store-2-location',
@@ -532,6 +539,7 @@ describe('InventoryService', () => {
       catalogueProductId: 'catalogue-p1',
       catalogueVariantId: 'catalogue-v1',
       catalogueImageId: 'catalogue-image-1',
+      prix_vente: 220,
     });
 
     expect(first.catalogueVariantId).toBe('catalogue-v1');
@@ -579,6 +587,7 @@ describe('InventoryService', () => {
         catalogueProductId: 'catalogue-p1',
         catalogueVariantId: 'catalogue-v1',
         catalogueImageId: 'unverified-image',
+        prix_vente: 220,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.catalogueProductImage.findFirst).toHaveBeenCalledWith(
@@ -615,6 +624,7 @@ describe('InventoryService', () => {
         age_monture: AgeMontureStock.ADULTE,
         taille_monture: '52-18',
         creationRequestId: '00000000-0000-4000-8000-000000000001',
+        prix_vente: 220,
       }),
     ).resolves.toEqual(existing);
   });

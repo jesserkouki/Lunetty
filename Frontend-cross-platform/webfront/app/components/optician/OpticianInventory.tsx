@@ -27,6 +27,7 @@ interface OpticianInventoryProps {
   inventoryData: unknown;
   locationsData: unknown;
   locationTypesData: unknown;
+  currency?: string;
   onApplyMovement: (stockId: string, input: Record<string, unknown>) => Promise<void>;
   onUpdateThreshold: (stockId: string, threshold: number) => Promise<void>;
   onUpdateStock: (
@@ -63,6 +64,7 @@ export function OpticianInventory({
   inventoryData,
   locationsData,
   locationTypesData,
+  currency = "",
   onApplyMovement,
   onUpdateThreshold,
   onUpdateStock,
@@ -195,6 +197,7 @@ export function OpticianInventory({
   } | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState("");
   const [articleType, setArticleType] = useState("VERRE_VUE");
+  const [sellingPrice, setSellingPrice] = useState("");
   const [lensDesign, setLensDesign] = useState("SIMPLE");
   const [lensTreatment, setLensTreatment] = useState("BLEU");
   const [rightPower, setRightPower] = useState("");
@@ -301,10 +304,15 @@ export function OpticianInventory({
   const isStockFormValid =
     isLensItem
       ? rightPower.trim() !== "" && leftPower.trim() !== ""
+      : articleType === "LENTILLE"
+        ? frameBrandReference.trim() !== ""
       : frameBrandReference.trim() !== "" &&
         frameAge !== "" &&
         frameSex !== "" &&
         frameSize.trim() !== "";
+  const isSellingPriceValid =
+    /^\d+(?:\.\d{1,3})?$/.test(sellingPrice.trim()) &&
+    Number(sellingPrice) > 0;
   const internalSuggestion = catalogueSuggestions.find(
     (suggestion) => suggestion.images.length > 0,
   );
@@ -318,6 +326,16 @@ export function OpticianInventory({
     | Record<string, unknown>
     | null
     | undefined;
+
+  useEffect(() => {
+    if (locations.some((location) => location.id === selectedLocationId)) return;
+    const defaultLocation =
+      locations.find((location) => location.est_par_defaut === true) ??
+      locations[0];
+    setSelectedLocationId(
+      defaultLocation ? String(defaultLocation.id) : "",
+    );
+  }, [locations, selectedLocationId]);
 
   useEffect(() => {
     let active = true;
@@ -757,12 +775,14 @@ export function OpticianInventory({
               puissance_droite: Number(rightPower),
               puissance_gauche: Number(leftPower),
             }
-          : {
+          : articleType === "MONTURE"
+            ? {
               marque_reference: frameBrandReference.trim(),
               age_monture: frameAge,
               public_cible: frameSex,
               taille_monture: frameSize.trim(),
-            }),
+            }
+            : { marque_reference: frameBrandReference.trim() }),
         ...(selection
           ? {
               catalogueProductId: selection.productId,
@@ -776,6 +796,7 @@ export function OpticianInventory({
         creationRequestId: creationRequestId.current,
         quantite_disponible: initialQty,
         seuil_reapprovisionnement: initialThreshold,
+        prix_vente: Number(sellingPrice),
       });
       setNewStockOpen(false);
       setCatalogueStep(false);
@@ -794,6 +815,7 @@ export function OpticianInventory({
       setPaidSuggestions([]);
       setPaidSearchStarted(false);
       setExternalPersistenceWarning(false);
+      setSellingPrice("");
       creationRequestId.current = null;
     } catch (reason) {
       setStockSubmitError(
@@ -1145,6 +1167,8 @@ export function OpticianInventory({
                 setPaidSearchStarted(false);
                 setPaidSelection(null);
                 setExternalPersistenceWarning(false);
+                setSellingPrice("");
+                setFrameBrandReference("");
                 setNewStockOpen(true);
               }}
               type="button"
@@ -1504,7 +1528,7 @@ export function OpticianInventory({
           aria-modal="true"
         >
           <div
-            className={`opt-modal-card${catalogueStep ? " large inventory-catalogue-modal" : ""}`}
+            className={`opt-modal-card inventory-stock-modal${catalogueStep ? " large inventory-catalogue-modal" : ""}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="opt-modal-header">
@@ -1531,7 +1555,7 @@ export function OpticianInventory({
               </button>
             </div>
 
-            <div className="opt-modal-body">
+            <div className="opt-modal-body" data-lenis-prevent>
               {catalogueStep ? (
                 <div className="catalogue-selection-step">
                   <div className="catalogue-search-fields">
@@ -2321,9 +2345,23 @@ export function OpticianInventory({
                 >
                   <option value="VERRE_VUE">Verres de vue</option>
                   <option value="VERRE_SOLEIL">Verres solaires</option>
+                  <option value="LENTILLE">Lentilles de contact</option>
                   <option value="MONTURE">Monture</option>
                 </select>
               </div>
+
+              {articleType === "LENTILLE" && (
+                <div className="field">
+                  <span>Marque ou référence de lentille</span>
+                  <input
+                    value={frameBrandReference}
+                    onChange={(event) => setFrameBrandReference(event.target.value)}
+                    maxLength={160}
+                    required
+                    placeholder="Marque ou référence"
+                  />
+                </div>
+              )}
 
               {articleType === "VERRE_VUE" || articleType === "VERRE_SOLEIL" ? (
                 <>
@@ -2370,7 +2408,7 @@ export function OpticianInventory({
                     <small>Indiquez les valeurs comme sur l’ordonnance, avec le signe + ou −.</small>
                   </div>
                 </>
-              ) : (
+              ) : articleType === "MONTURE" ? (
                 <>
                   <div className="field">
                     <span>Marque ou référence de la monture</span>
@@ -2460,7 +2498,26 @@ export function OpticianInventory({
                     />
                   </div>
                 </>
-              )}
+              ) : null}
+
+              <div className="field">
+                <span>Prix de vente unitaire{currency ? ` (${currency})` : ""} *</span>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="0.001"
+                  value={sellingPrice}
+                  onChange={(event) => setSellingPrice(event.target.value)}
+                  required
+                  aria-invalid={Boolean(sellingPrice) && !isSellingPriceValid}
+                />
+                <small>Prix d’une unité, dans la devise de la boutique.</small>
+                {sellingPrice && !isSellingPriceValid && (
+                  <small className="error-message" role="alert">
+                    Saisissez un montant positif avec au plus trois décimales.
+                  </small>
+                )}
+              </div>
 
               <div className="field">
                 <span>Emplacement de stockage</span>
@@ -2471,7 +2528,11 @@ export function OpticianInventory({
                     required
                   >
                     <option value="">
-                      {locations.length > 0 ? "Choisir un emplacement…" : "Aucun emplacement disponible"}
+                      {locationsData === undefined
+                        ? "Chargement des emplacements…"
+                        : locations.length > 0
+                          ? "Choisir un emplacement…"
+                          : "Aucun emplacement disponible"}
                     </option>
                     {locations.map((loc) => (
                       <option key={loc.id as string} value={loc.id as string}>
@@ -2993,7 +3054,12 @@ export function OpticianInventory({
                   </button>
                   <button
                     className="button primary"
-                    disabled={submitting || !isStockFormValid || !selectedLocationId}
+                    disabled={
+                      submitting ||
+                      !isStockFormValid ||
+                      !isSellingPriceValid ||
+                      !selectedLocationId
+                    }
                     onClick={() => {
                       if (articleType !== "MONTURE") {
                         void createStock(null);

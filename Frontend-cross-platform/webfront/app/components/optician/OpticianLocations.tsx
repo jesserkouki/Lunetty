@@ -10,21 +10,31 @@ import {
 
 interface OpticianLocationsProps {
   locationsData: unknown;
+  locationTypesData: unknown;
   storeId?: string;
-  onCreateLocation: (input: Record<string, unknown>) => Promise<void>;
+  onCreateLocations: (inputs: Record<string, unknown>[]) => Promise<void>;
+  onCreateLocationType: (input: Record<string, unknown>) => Promise<unknown>;
   onUpdateLocation: (locationId: string, input: Record<string, unknown>) => Promise<void>;
+  onDeleteLocation: (locationId: string) => Promise<void>;
 }
 
 export function OpticianLocations({
   locationsData,
-  onCreateLocation,
+  locationTypesData,
+  onCreateLocations,
+  onCreateLocationType,
   onUpdateLocation,
+  onDeleteLocation,
 }: OpticianLocationsProps) {
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [locName, setLocName] = useState("");
-  const [locCode, setLocCode] = useState("");
-  const [locType, setLocType] = useState("STORE");
+  const [locationDrafts, setLocationDrafts] = useState([{ nom: "", code: "" }]);
+  const [locType, setLocType] = useState("standard:STORE");
   const [locDefault, setLocDefault] = useState(false);
+  const [newTypeName, setNewTypeName] = useState("");
+  const [typeOverrides, setTypeOverrides] = useState<Array<Record<string, unknown>>>([]);
+  const [showNewTypeForm, setShowNewTypeForm] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [typeError, setTypeError] = useState("");
 
   const [editModal, setEditModal] = useState<{
     id: string;
@@ -34,10 +44,48 @@ export function OpticianLocations({
   } | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
+  const [creatingType, setCreatingType] = useState(false);
+  const [deletingLocationId, setDeletingLocationId] = useState("");
+  const [deleteError, setDeleteError] = useState("");
 
   const rawLocations = Array.isArray(locationsData)
     ? (locationsData as Array<Record<string, unknown>>)
     : [];
+  const rawLocationTypes = Array.isArray(locationTypesData)
+    ? (locationTypesData as Array<Record<string, unknown>>)
+    : [];
+  const locationTypes = [
+    ...rawLocationTypes,
+    ...typeOverrides.filter(
+      (override) => !rawLocationTypes.some((type) => type.id === override.id),
+    ),
+  ].filter((type) => type.est_actif !== false);
+  const canCreateNames =
+    locationDrafts.length >= 1 &&
+    locationDrafts.length <= 50 &&
+    locationDrafts.every(
+      (location) =>
+        Boolean(location.nom.trim()) &&
+        location.nom.trim().length <= 120 &&
+        location.code.trim().length <= 40,
+    );
+  const canCreateLocations =
+    canCreateNames && !submitting;
+
+  const resetCreateForm = () => {
+    setLocationDrafts([{ nom: "", code: "" }]);
+    setLocType("standard:STORE");
+    setLocDefault(false);
+    setFormError("");
+    setTypeError("");
+    setShowNewTypeForm(false);
+    setNewTypeName("");
+  };
+
+  const typeInput = (value: string) =>
+    value.startsWith("custom:")
+      ? { type_personnalise_id: value.slice("custom:".length) }
+      : { type: value.slice("standard:".length), type_personnalise_id: null };
 
   return (
     <div className="opt-locations-page">
@@ -50,10 +98,7 @@ export function OpticianLocations({
           <button
             className="button primary"
             onClick={() => {
-              setLocName("");
-              setLocCode("");
-              setLocType("STORE");
-              setLocDefault(false);
+              resetCreateForm();
               setCreateModalOpen(true);
             }}
             type="button"
@@ -63,6 +108,11 @@ export function OpticianLocations({
         </div>
 
         <div className="opt-card-body-tight">
+          {deleteError && (
+            <p className="error-message" role="alert">
+              {deleteError}
+            </p>
+          )}
           {rawLocations.length > 0 ? (
             <div className="opt-location-grid">
               {rawLocations.map((loc) => {
@@ -106,6 +156,31 @@ export function OpticianLocations({
                       >
                         Modifier l&apos;emplacement
                       </button>
+                      <button
+                        className="button danger small"
+                        disabled={deletingLocationId === id}
+                        onClick={async () => {
+                          if (!window.confirm(
+                            `Supprimer définitivement l’emplacement « ${String(loc.nom)} » ? Un emplacement contenant du stock ne pourra pas être supprimé.`,
+                          )) return;
+                          setDeletingLocationId(id);
+                          setDeleteError("");
+                          try {
+                            await onDeleteLocation(id);
+                          } catch (reason) {
+                            setDeleteError(
+                              reason instanceof Error
+                                ? reason.message
+                                : "La suppression de l’emplacement a échoué.",
+                            );
+                          } finally {
+                            setDeletingLocationId("");
+                          }
+                        }}
+                        type="button"
+                      >
+                        {deletingLocationId === id ? "Suppression…" : "Supprimer"}
+                      </button>
                     </div>
                   </div>
                 );
@@ -140,33 +215,177 @@ export function OpticianLocations({
               </button>
             </div>
 
-            <div className="opt-modal-body">
+            <div className="opt-modal-body" data-lenis-prevent>
               <div className="field">
-                <span>Nom de l&apos;emplacement *</span>
-                <input
-                  value={locName}
-                  onChange={(e) => setLocName(e.target.value)}
-                  placeholder="Ex: Vitrine principale / Rayon Solaire"
-                  required
-                />
+                <span>Type d&apos;emplacement</span>
+                <div className="inventory-location-select">
+                  <select
+                    value={locType}
+                    onChange={(event) => setLocType(event.target.value)}
+                  >
+                    <option value="standard:STORE">Boutique</option>
+                    <option value="standard:ENTREPOT">Entrepôt</option>
+                    <option value="standard:AUTRE">Autre</option>
+                    {locationTypes.map((type) => (
+                      <option key={String(type.id)} value={`custom:${String(type.id)}`}>
+                        {String(type.nom)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="button secondary inventory-add-location"
+                    type="button"
+                    aria-label="Ajouter un type d’emplacement"
+                    title="Ajouter un type d’emplacement"
+                    onClick={() => {
+                      setShowNewTypeForm((shown) => !shown);
+                      setTypeError("");
+                    }}
+                  >
+                    <IconPlus height={16} width={16} />
+                  </button>
+                </div>
+                {showNewTypeForm && (
+                  <div className="inventory-location-type-create">
+                    <input
+                      aria-label="Nom du nouveau type d’emplacement"
+                      value={newTypeName}
+                      maxLength={80}
+                      onChange={(event) => {
+                        setNewTypeName(event.target.value);
+                        setTypeError("");
+                      }}
+                      placeholder="Ex. : Vitrine"
+                    />
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={creatingType || !newTypeName.trim()}
+                      onClick={async () => {
+                        setCreatingType(true);
+                        setTypeError("");
+                        try {
+                          const created = await onCreateLocationType({
+                            nom: newTypeName.trim(),
+                          });
+                          if (!isRecord(created) || typeof created.id !== "string") {
+                            throw new Error("Le type créé n’a pas été retourné par le serveur.");
+                          }
+                          setTypeOverrides((current) => [
+                            ...current.filter((type) => type.id !== created.id),
+                            created,
+                          ]);
+                          setLocType(`custom:${created.id}`);
+                          setNewTypeName("");
+                          setShowNewTypeForm(false);
+                        } catch (reason) {
+                          setTypeError(
+                            reason instanceof Error
+                              ? reason.message
+                              : "Impossible de créer ce type.",
+                          );
+                        } finally {
+                          setCreatingType(false);
+                        }
+
+                      }}
+                    >
+                      {creatingType ? "Création…" : "Créer le type"}
+                    </button>
+                    {typeError && <p className="error-message" role="alert">{typeError}</p>}
+                  </div>
+                )}
               </div>
 
               <div className="field">
-                <span>Code court interne</span>
-                <input
-                  value={locCode}
-                  onChange={(e) => setLocCode(e.target.value)}
-                  placeholder="Ex: MAG-01"
-                />
-              </div>
-
-              <div className="field">
-                <span>Type d&apos;espace</span>
-                <select value={locType} onChange={(e) => setLocType(e.target.value)}>
-                  <option value="STORE">Boutique / Rayon de vente</option>
-                  <option value="ENTREPOT">Entrepôt / Arrière-boutique</option>
-                  <option value="AUTRE">Atelier de montage / Autre</option>
-                </select>
+                <span>Nom des emplacements</span>
+                <small>Chaque emplacement peut avoir son propre nom et son propre code.</small>
+                <div className="location-batch-list">
+                  {locationDrafts.map((location, index) => (
+                    <div className="location-batch-row" key={index}>
+                      <label className="field">
+                        <span>Nom {index + 1} *</span>
+                        <input
+                          value={location.nom}
+                          onChange={(event) => {
+                            const nom = event.target.value;
+                            setLocationDrafts((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, nom } : item,
+                              ),
+                            );
+                            setFormError("");
+                          }}
+                          placeholder={`Ex. : Emplacement ${index + 1}`}
+                          maxLength={120}
+                          required
+                          aria-invalid={
+                            (locationDrafts.length > 1 || Boolean(formError)) &&
+                            !location.nom.trim()
+                          }
+                        />
+                        {(locationDrafts.length > 1 || formError) &&
+                          !location.nom.trim() && (
+                          <small className="error-message" role="alert">
+                            Le nom est obligatoire.
+                          </small>
+                          )}
+                      </label>
+                      <label className="field">
+                        <span>Code (facultatif)</span>
+                        <input
+                          value={location.code}
+                          onChange={(event) => {
+                            const code = event.target.value;
+                            setLocationDrafts((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, code } : item,
+                              ),
+                            );
+                            setFormError("");
+                          }}
+                          placeholder="Ex. : MAG-01"
+                          maxLength={40}
+                          aria-invalid={location.code.trim().length > 40}
+                        />
+                      </label>
+                      {locationDrafts.length > 1 && (
+                        <button
+                          className="button secondary location-batch-remove"
+                          type="button"
+                          aria-label={`Supprimer le champ emplacement ${index + 1}`}
+                          title="Supprimer cet emplacement"
+                          onClick={() => {
+                            setLocationDrafts((current) =>
+                              current.filter((_, itemIndex) => itemIndex !== index),
+                            );
+                            setFormError("");
+                          }}
+                        >
+                          <IconX height={16} width={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  className="button secondary location-batch-add"
+                  type="button"
+                  disabled={locationDrafts.length >= 50}
+                  onClick={() => {
+                    setLocationDrafts((current) => [
+                      ...current,
+                      { nom: "", code: "" },
+                    ]);
+                    setFormError("");
+                  }}
+                >
+                  <IconPlus height={16} width={16} />
+                  Ajouter un emplacement
+                </button>
+                {locationDrafts.length >= 50 && (
+                  <small>Maximum 50 emplacements par création.</small>
+                )}
               </div>
 
               <label className="checkbox-field">
@@ -177,6 +396,10 @@ export function OpticianLocations({
                 />
                 <span>Définir comme emplacement par défaut pour les réceptions</span>
               </label>
+              {locDefault && locationDrafts.length > 1 && (
+                <small>Le premier emplacement de la liste sera défini comme emplacement par défaut.</small>
+              )}
+              {formError && <p className="error-message" role="alert">{formError}</p>}
             </div>
 
             <div className="opt-modal-footer">
@@ -185,24 +408,40 @@ export function OpticianLocations({
               </button>
               <button
                 className="button primary"
-                disabled={submitting || !locName}
+                disabled={!canCreateLocations}
                 onClick={async () => {
                   setSubmitting(true);
+                  setFormError("");
                   try {
-                    await onCreateLocation({
-                      nom: locName,
-                      code: locCode || undefined,
-                      type: locType,
-                      est_par_defaut: locDefault,
-                    });
+                    const type = typeInput(locType);
+                    const inputs = locationDrafts.map((location, index) => ({
+                      nom: location.nom.trim(),
+                      ...(location.code.trim()
+                        ? { code: location.code.trim() }
+                        : {}),
+                      ...type,
+                      est_par_defaut: locDefault && index === 0,
+                    }));
+                    await onCreateLocations(inputs);
                     setCreateModalOpen(false);
+                    resetCreateForm();
+                  } catch (reason) {
+                    setFormError(
+                      reason instanceof Error
+                        ? reason.message
+                        : "Impossible de créer les emplacements.",
+                    );
                   } finally {
                     setSubmitting(false);
                   }
                 }}
                 type="button"
               >
-                {submitting ? "Création…" : "Créer l'emplacement"}
+                {submitting
+                  ? "Création…"
+                  : locationDrafts.length > 1
+                    ? `Créer ${locationDrafts.length} emplacements`
+                    : "Créer l’emplacement"}
               </button>
             </div>
           </div>
@@ -285,4 +524,8 @@ export function OpticianLocations({
       )}
     </div>
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
