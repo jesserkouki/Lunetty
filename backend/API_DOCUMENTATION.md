@@ -155,14 +155,25 @@ shop-specific prices or stock quantities.
 - `POST /api/v1/admin/catalogue/products/:id/images`,
   `PATCH|DELETE /api/v1/admin/catalogue/images/:id` — manage image URL/storage
   metadata, source/licensing, primary designation, and verification.
-  The existing model supports verified/unverified states only; it has no
-  separate rejected state or binary-upload endpoint.
+- `GET /api/v1/admin/catalogue/image-contributions?page=&limit=&reviewStatus=`,
+  `GET /api/v1/admin/catalogue/image-contributions/:id/image`, and
+  `POST /api/v1/admin/catalogue/image-contributions/:id/verify|reject` —
+  platform-admin review of public optician uploads. Verification creates or
+  reuses the normalized frame product and adds a verified shared-catalogue
+  image; pending and rejected uploads are not returned in shared search.
+  The list can filter `PENDING`, `APPROVED`, or `REJECTED` contributions and
+  includes reviewer/time and rejection reason. Rejection requires a reason.
+  Review decisions are written to the shop audit journal.
 - `GET /api/v1/products/image-suggestions` — authenticated shop staff image
   search. Supply `storeId` and one or more of `brand`, `reference`, `color`, or
   `model`, or `ean`; the user must have active membership and `inventory.create`
   permission in that shop. Only verified frame images are returned, archived
   variants are excluded, variant-scoped images are never mixed across colours,
-  and only the single best verified image is returned.
+  and only the single best verified catalogue image is returned. The response
+  also includes exact-match `privateImages` contributed to the requesting shop;
+  those are explicitly unverified and are never exposed to other shops.
+- `GET /api/v1/products/catalogue-image/:id` — serves only an approved public
+  upload whose shared catalogue image remains linked.
 - `GET /api/v1/products/image-suggestions/external` — authenticated automatic
   free-search fallback using the same search criteria and shop permission.
   Requests are limited to 10 per minute per client. Openverse is queried with
@@ -200,27 +211,42 @@ normalized identity, and finally approximate matching, in that priority order.
 Approximate results are labeled `APPROXIMATE`; they are not reported as exact.
 External images are preview-only: stock creation does not persist their URL,
 provider, or attribution. The optician must explicitly confirm that the stock
-will be created without an image. Manual stock-image upload is not available:
-existing upload endpoints are specific to reference scanning, store branding,
-avatars, or private prescriptions and are not a safe stock-image store.
-External results are never added to or marked verified in the shared
-catalogue. A future migration would need a stock-image relation containing
-stock ID, image kind/source, optional catalogue image ID or storage key,
-external image/source URLs, provider, license and attribution metadata, plus
-ownership constraints. The migration is deliberately deferred.
+will be created without an external image. External results are never added to
+or marked verified in the shared catalogue.
 
 
 ### Inventory
 
 - `GET|POST /api/v1/stores/:storeId/inventory` — store-scoped inventory.
+- `POST /api/v1/stores/:storeId/inventory/frame-images` — authenticated
+  multipart upload requiring `inventory.create`. Fields include `image`,
+  `brand`, `reference`, optional `model`, `color`, and `ean`, plus
+  `visibility=PRIVATE|PUBLIC`. JPEG, PNG, and WebP files up to 10 MiB are
+  decoded and re-encoded as WebP; declared MIME and actual image format must
+  agree. Files are stored under the existing uploads volume at
+  `uploads/montures/<safe-shop-name>-<shop-id>/{private|public}/<image-id>/<reference>-<brand>.webp`.
+  Public uploads also require explicit sharing authorization and remain
+  pending until platform-admin verification. Private uploads are searchable
+  only by their owning shop.
+- `GET /api/v1/stores/:storeId/inventory/frame-images/:imageId/image` —
+  authenticated preview for an image belonging to the caller’s authorized
+  shop. `DELETE` on `/api/v1/stores/:storeId/inventory/frame-images/:imageId`
+  removes only an unlinked, unapproved upload.
 - `GET|PATCH /api/v1/stores/:storeId/inventory/:stockId` — read a stock record
   or update its reorder threshold; stock quantity changes require a movement.
 - Stock create/update DTOs accept optional `catalogueProductId` and
   `catalogueVariantId` links. A variant must belong to the referenced or inferred
   catalogue product. Existing records without these links remain valid.
+- Frame stock creation can include `frameImageUploadId`; the API requires that
+  the uploaded image belongs to the same shop and is not rejected. The image
+  relation is persisted on the stock record, and lens stock cannot use it.
 - Frame stock creation may also include a `catalogueImageId`; the API verifies
   that it is verified and belongs to the active selected product and variant.
-  The current stock model does not persist that image ID or its URL.
+  The stock response includes the associated image metadata. Frame stock update
+  can replace or clear `catalogueImageId` and/or `frameImageUploadId`; assigning
+  one image source clears the other. The additive migration that stores the
+  catalogue image foreign key and contribution rejection reason is generated
+  but has not been applied.
   `creationRequestId` is a UUID idempotency key and should be reused for retries.
 - `GET|POST /api/v1/stores/:storeId/inventory/:stockId/movements` — immutable
   movement history and transactional operations.

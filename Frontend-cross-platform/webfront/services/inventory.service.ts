@@ -1,4 +1,8 @@
-import { apiRequest, JsonRecord, queryString } from "./api";
+import { apiRequest, apiRequestBlob, JsonRecord, queryString } from "./api";
+import type {
+  FrameImageUploadInput,
+  FrameImageUploadResult,
+} from "./catalogue.service";
 import type { Page } from "./users.service";
 
 export const inventoryService = {
@@ -24,6 +28,30 @@ export const inventoryService = {
     });
     return result.reference.reference_brute;
   },
+  uploadFrameImage: (
+    storeId: string,
+    image: File,
+    input: FrameImageUploadInput,
+  ) => {
+    const formData = new FormData();
+    formData.append("image", image);
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== undefined) formData.append(key, String(value));
+    }
+    return apiRequest<FrameImageUploadResult>(
+      `stores/${storeId}/inventory/frame-images`,
+      { method: "POST", body: formData },
+    );
+  },
+  readFrameImage: (storeId: string, imageId: string) =>
+    apiRequestBlob(
+      `stores/${storeId}/inventory/frame-images/${encodeURIComponent(imageId)}/image`,
+    ),
+  deleteFrameImage: (storeId: string, imageId: string) =>
+    apiRequest<{ success: boolean }>(
+      `stores/${storeId}/inventory/frame-images/${encodeURIComponent(imageId)}`,
+      { method: "DELETE" },
+    ),
   update: (storeId: string, stockId: string, input: JsonRecord) =>
     apiRequest<JsonRecord>(`stores/${storeId}/inventory/${stockId}`, {
       method: "PATCH",

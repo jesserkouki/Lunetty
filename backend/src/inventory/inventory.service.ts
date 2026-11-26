@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   ConceptionVerreStock,
+  FrameImageReviewStatus,
   Prisma,
   TraitementVerreStock,
   TypeMouvementStock,
@@ -26,9 +27,38 @@ const stockSelect = {
   storeListingVariantId: true,
   catalogueProductId: true,
   catalogueVariantId: true,
+  catalogueImage: {
+    select: {
+      id: true,
+      imageUrl: true,
+      imageSource: true,
+      sourceUrl: true,
+      licenseInformation: true,
+      isVerified: true,
+      product: { select: { brand: true, reference: true, model: true } },
+      variant: { select: { colorCode: true, colorName: true } },
+    },
+  },
+  frameImageUpload: {
+    select: {
+      id: true,
+      imageUrl: true,
+      brand: true,
+      reference: true,
+      model: true,
+      color: true,
+      visibility: true,
+      reviewStatus: true,
+    },
+  },
   emplacement_id: true,
   age_monture: true,
   type_article: true,
+  frameImageUploadId: true,
+  catalogueImageId: true,
+  catalogueProduct: {
+    select: { id: true, brand: true, reference: true, model: true },
+  },
   conception_verre: true,
   traitement_verre: true,
   puissance_droite: true,
@@ -112,7 +142,8 @@ export class InventoryService {
       input.type_article !== TypeArticleStock.MONTURE &&
       (input.catalogueProductId ||
         input.catalogueVariantId ||
-        input.catalogueImageId)
+        input.catalogueImageId ||
+        input.frameImageUploadId)
     ) {
       throw new BadRequestException(
         'Catalogue image selection is only available for frames.',
@@ -132,6 +163,11 @@ export class InventoryService {
         input.catalogueVariantId ||
         input.catalogueImageId,
     );
+    if (hasCatalogueSelection && input.frameImageUploadId) {
+      throw new BadRequestException(
+        'Select either a catalogue image or an uploaded frame image.',
+      );
+    }
     if (
       hasCatalogueSelection &&
       (!input.catalogueProductId || !input.catalogueImageId)
@@ -236,6 +272,21 @@ export class InventoryService {
         );
       }
     }
+    if (input.frameImageUploadId) {
+      const frameImage = await this.prisma.frameImageUpload.findFirst({
+        where: {
+          id: input.frameImageUploadId,
+          storeId,
+          reviewStatus: { not: FrameImageReviewStatus.REJECTED },
+        },
+        select: { id: true },
+      });
+      if (!frameImage) {
+        throw new BadRequestException(
+          'The uploaded frame image is unavailable for this store.',
+        );
+      }
+    }
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -252,6 +303,12 @@ export class InventoryService {
               : {}),
             ...(input.catalogueVariantId
               ? { catalogueVariantId: input.catalogueVariantId }
+              : {}),
+            ...(input.frameImageUploadId
+              ? { frameImageUploadId: input.frameImageUploadId }
+              : {}),
+            ...(input.catalogueImageId
+              ? { catalogueImageId: input.catalogueImageId }
               : {}),
             emplacement_id: input.emplacement_id,
             type_article: input.type_article,
@@ -383,16 +440,37 @@ export class InventoryService {
     input: UpdateStockDto,
   ) {
     await this.authorize(userId, storeId, 'inventory.update');
-    let resolvedCatalogueProductId = input.catalogueProductId;
+    const current = await this.prisma.stock.findFirst({
+      where: { id: stockId, location: { magasin_id: storeId } },
+      select: {
+        id: true,
+        type_article: true,
+        seuil_reapprovisionnement: true,
+        catalogueProductId: true,
+        catalogueVariantId: true,
+        catalogueImageId: true,
+        frameImageUploadId: true,
+      },
+    });
+    if (!current) throw new NotFoundException('Inventory record not found');
+
     if (input.catalogueProductId === null && input.catalogueVariantId === undefined) {
       throw new BadRequestException(
         'Clear the catalogue variant before clearing its product.',
       );
     }
-    if (input.catalogueVariantId) {
+    let resolvedCatalogueProductId =
+      input.catalogueProductId === undefined
+        ? current.catalogueProductId
+        : input.catalogueProductId;
+    let resolvedCatalogueVariantId =
+      input.catalogueVariantId === undefined
+        ? current.catalogueVariantId
+        : input.catalogueVariantId;
+    if (resolvedCatalogueVariantId) {
       const variant = await this.prisma.catalogueProductVariant.findFirst({
         where: {
-          id: input.catalogueVariantId,
+          id: resolvedCatalogueVariantId,
           isActive: true,
           deletedAt: null,
           product: {
@@ -408,7 +486,7 @@ export class InventoryService {
         throw new BadRequestException('The catalogue variant is unavailable.');
       }
       if (
-        resolvedCatalogueProductId &&
+        resolvedCatalogueProductId !== null &&
         resolvedCatalogueProductId !== variant.catalogueProductId
       ) {
         throw new BadRequestException(
@@ -431,12 +509,88 @@ export class InventoryService {
         throw new BadRequestException('The catalogue product is unavailable.');
       }
     }
-    const result = await this.prisma.$transaction(async (tx) => {
-      const current = await tx.stock.findFirst({
-        where: { id: stockId, location: { magasin_id: storeId } },
-        select: { id: true, seuil_reapprovisionnement: true },
+
+    let resolvedCatalogueImageId =
+      input.catalogueImageId === undefined
+        ? current.catalogueImageId
+        : input.catalogueImageId;
+    let resolvedFrameImageUploadId =
+      input.frameImageUploadId === undefined
+        ? current.frameImageUploadId
+        : input.frameImageUploadId;
+    if (input.catalogueImageId) resolvedFrameImageUploadId = null;
+    if (input.frameImageUploadId) resolvedCatalogueImageId = null;
+    if (
+      resolvedCatalogueImageId &&
+      resolvedFrameImageUploadId
+    ) {
+      throw new BadRequestException(
+        'Select either a catalogue image or an uploaded frame image.',
+      );
+    }
+
+    const imageChanged =
+      input.catalogueImageId !== undefined ||
+      input.frameImageUploadId !== undefined;
+    if (
+      current.type_article !== TypeArticleStock.MONTURE &&
+      (resolvedCatalogueImageId || resolvedFrameImageUploadId)
+    ) {
+      throw new BadRequestException(
+        'Catalogue image selection is only available for frames.',
+      );
+    }
+    if (
+      resolvedCatalogueImageId &&
+      (imageChanged ||
+        input.catalogueProductId !== undefined ||
+        input.catalogueVariantId !== undefined)
+    ) {
+      if (!resolvedCatalogueProductId) {
+        throw new BadRequestException(
+          'A catalogue product is required for a catalogue image.',
+        );
+      }
+      const image = await this.prisma.catalogueProductImage.findFirst({
+        where: {
+          id: resolvedCatalogueImageId,
+          catalogueProductId: resolvedCatalogueProductId,
+          isVerified: true,
+          OR: resolvedCatalogueVariantId
+            ? [{ variantId: null }, { variantId: resolvedCatalogueVariantId }]
+            : [{ variantId: null }],
+          product: {
+            is: {
+              isActive: true,
+              productType: TypeProduit.MONTURE,
+            },
+          },
+        },
+        select: { id: true },
       });
-      if (!current) throw new NotFoundException('Inventory record not found');
+      if (!image) {
+        throw new BadRequestException(
+          'The selected catalogue image is unavailable or does not match the selected variant.',
+        );
+      }
+    }
+    if (resolvedFrameImageUploadId && imageChanged) {
+      const image = await this.prisma.frameImageUpload.findFirst({
+        where: {
+          id: resolvedFrameImageUploadId,
+          storeId,
+          reviewStatus: { not: FrameImageReviewStatus.REJECTED },
+        },
+        select: { id: true },
+      });
+      if (!image) {
+        throw new BadRequestException(
+          'The uploaded frame image is unavailable for this store.',
+        );
+      }
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.stock.updateMany({
         where: {
           id: stockId,
@@ -445,13 +599,18 @@ export class InventoryService {
         },
         data: {
           seuil_reapprovisionnement: input.seuil_reapprovisionnement,
-          ...(input.catalogueProductId !== undefined
-            ? { catalogueProductId: resolvedCatalogueProductId }
-            : resolvedCatalogueProductId
-              ? { catalogueProductId: resolvedCatalogueProductId }
-              : {}),
-          ...(input.catalogueVariantId !== undefined
-            ? { catalogueVariantId: input.catalogueVariantId }
+          ...(input.catalogueProductId !== undefined ||
+          input.catalogueVariantId !== undefined
+            ? {
+                catalogueProductId: resolvedCatalogueProductId,
+                catalogueVariantId: resolvedCatalogueVariantId,
+              }
+            : {}),
+          ...(imageChanged
+            ? {
+                catalogueImageId: resolvedCatalogueImageId,
+                frameImageUploadId: resolvedFrameImageUploadId,
+              }
             : {}),
         },
       });
@@ -463,12 +622,24 @@ export class InventoryService {
       await this.audit.record(tx, {
         storeId,
         actorId: userId,
-        action: 'inventory.reorder_threshold_changed',
+        action: imageChanged
+          ? 'inventory.stock_image_updated'
+          : 'inventory.reorder_threshold_changed',
         entityType: 'stock',
         entityId: stockId,
-        description: 'Inventory reorder threshold changed',
-        before: { reorderThreshold: current.seuil_reapprovisionnement },
-        after: { reorderThreshold: input.seuil_reapprovisionnement },
+        description: imageChanged
+          ? 'Inventory frame image updated'
+          : 'Inventory reorder threshold changed',
+        before: {
+          reorderThreshold: current.seuil_reapprovisionnement,
+          catalogueImageId: current.catalogueImageId,
+          frameImageUploadId: current.frameImageUploadId,
+        },
+        after: {
+          reorderThreshold: input.seuil_reapprovisionnement,
+          catalogueImageId: resolvedCatalogueImageId,
+          frameImageUploadId: resolvedFrameImageUploadId,
+        },
       });
       return updated;
     });

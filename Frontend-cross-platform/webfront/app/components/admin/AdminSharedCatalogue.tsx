@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   catalogueAdminService,
   type CatalogueImage,
+  type CatalogueImageContribution,
   type CatalogueProduct,
   type CatalogueProductType,
   type CatalogueSummary,
@@ -84,11 +85,24 @@ export function AdminSharedCatalogue() {
   const [productDraft, setProductDraft] = useState<ProductDraft | null>(null);
   const [variantDraft, setVariantDraft] = useState<VariantDraft | null>(null);
   const [imageDraft, setImageDraft] = useState<ImageDraft | null>(null);
+  const [imageContributions, setImageContributions] = useState<
+    CatalogueImageContribution[]
+  >([]);
+  const [contributionPreviews, setContributionPreviews] = useState<
+    Record<string, string>
+  >({});
+  const [contributionPreviewError, setContributionPreviewError] = useState("");
+  const [reviewingContributionId, setReviewingContributionId] = useState<
+    string | null
+  >(null);
+  const [contributionFilter, setContributionFilter] = useState<
+    "PENDING" | "APPROVED" | "REJECTED" | "ALL"
+  >("PENDING");
 
   const requestCatalogueData = useCallback(async () => {
       const active =
         activeFilter === "" ? undefined : activeFilter === "active";
-      const [nextSummary, result] = await Promise.all([
+      const [nextSummary, result, pendingImages] = await Promise.all([
         catalogueAdminService.summary(),
         catalogueAdminService.products({
           q: query || undefined,
@@ -99,16 +113,29 @@ export function AdminSharedCatalogue() {
             | undefined,
           isActive: active,
         }),
+        catalogueAdminService.imageContributions(
+          1,
+          50,
+          contributionFilter === "ALL" ? undefined : contributionFilter,
+        ),
       ]);
-      return { nextSummary, result };
-  }, [activeFilter, page, query, typeFilter]);
+      return { nextSummary, result, pendingImages };
+  }, [activeFilter, contributionFilter, page, query, typeFilter]);
 
   const applyCatalogueData = useCallback(
-    (nextSummary: CatalogueSummary, result: Awaited<ReturnType<typeof catalogueAdminService.products>>) => {
+    (
+      nextSummary: CatalogueSummary,
+      result: Awaited<ReturnType<typeof catalogueAdminService.products>>,
+      pendingImages: Awaited<
+        ReturnType<typeof catalogueAdminService.imageContributions>
+      >,
+    ) => {
       setSummary(nextSummary);
       setProducts(result.data);
       setTotal(result.meta.total);
       setTotalPages(Math.max(result.meta.totalPages, 1));
+      setImageContributions(pendingImages.data);
+      setContributionPreviewError("");
     },
     [],
   );
@@ -116,8 +143,8 @@ export function AdminSharedCatalogue() {
   useEffect(() => {
     let active = true;
     requestCatalogueData()
-      .then(({ nextSummary, result }) => {
-        if (active) applyCatalogueData(nextSummary, result);
+      .then(({ nextSummary, result, pendingImages }) => {
+        if (active) applyCatalogueData(nextSummary, result, pendingImages);
       })
       .catch((reason: unknown) => {
         if (active) setError(errorMessage(reason));
@@ -130,12 +157,42 @@ export function AdminSharedCatalogue() {
     };
   }, [applyCatalogueData, requestCatalogueData]);
 
+  useEffect(() => {
+    let active = true;
+    const previewUrls: string[] = [];
+    Promise.all(
+      imageContributions.map(async (contribution) => {
+        try {
+          const blob = await catalogueAdminService.imageContributionPreview(
+            contribution.id,
+          );
+          const url = URL.createObjectURL(blob);
+          previewUrls.push(url);
+          return [contribution.id, url] as const;
+        } catch (reason) {
+          if (active) setContributionPreviewError(errorMessage(reason));
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (active) {
+        setContributionPreviews(
+          Object.fromEntries(entries.filter((entry) => entry !== null)),
+        );
+      }
+    });
+    return () => {
+      active = false;
+      previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imageContributions]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const { nextSummary, result } = await requestCatalogueData();
-      applyCatalogueData(nextSummary, result);
+      const { nextSummary, result, pendingImages } = await requestCatalogueData();
+      applyCatalogueData(nextSummary, result, pendingImages);
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -305,6 +362,47 @@ export function AdminSharedCatalogue() {
     );
   };
 
+  const reviewImageContribution = async (
+    contributionId: string,
+    decision: "verify" | "reject",
+  ) => {
+    let rejectionReason = "";
+    if (decision === "reject") {
+      const enteredReason = window.prompt(
+        "Provide a reason for rejecting this contribution:",
+      );
+      if (enteredReason === null) return;
+      rejectionReason = enteredReason.trim();
+      if (rejectionReason.length < 3 || rejectionReason.length > 500) {
+        setError("Enter a rejection reason between 3 and 500 characters.");
+        return;
+      }
+    }
+    setReviewingContributionId(contributionId);
+    setError("");
+    setNotice("");
+    try {
+      if (decision === "verify") {
+        await catalogueAdminService.verifyImageContribution(contributionId);
+      } else {
+        await catalogueAdminService.rejectImageContribution(
+          contributionId,
+          rejectionReason,
+        );
+      }
+      await refresh();
+      setNotice(
+        decision === "verify"
+          ? "Image verified and added to shared catalogue search."
+          : "Public image contribution rejected.",
+      );
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setReviewingContributionId(null);
+    }
+  };
+
   const deleteImage = async (image: CatalogueImage) => {
     if (!window.confirm("Delete this catalogue image? This cannot be undone.")) {
       return;
@@ -399,6 +497,135 @@ export function AdminSharedCatalogue() {
         </div>
       )}
       {notice && <div className="admin-message is-success" role="status">{notice}</div>}
+
+      <section className="admin-panel catalogue-contributions-panel">
+        <div className="admin-panel-heading catalogue-panel-heading">
+          <div>
+            <h3>Public frame image contributions</h3>
+            <p>
+                {imageContributions.length}{" "}
+                {contributionFilter === "PENDING"
+                  ? "awaiting review"
+                  : contributionFilter === "ALL"
+                    ? "contributions"
+                    : contributionFilter.toLowerCase() + " contributions"}
+                {" "}· public images enter shared search only after approval.
+            </p>
+          </div>
+          <div className="catalogue-contribution-filters" aria-label="Contribution status">
+            {(["PENDING", "APPROVED", "REJECTED", "ALL"] as const).map((filter) => (
+              <button
+                className={`admin-button ${contributionFilter === filter ? "admin-button-primary" : "admin-button-secondary"}`}
+                key={filter}
+                type="button"
+                onClick={() => setContributionFilter(filter)}
+              >
+                {filter === "ALL" ? "All" : filter[0] + filter.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+        {contributionPreviewError && (
+          <div className="admin-message is-error" role="alert">
+            <span>{contributionPreviewError}</span>
+            <button type="button" onClick={() => void refresh()}>Retry</button>
+          </div>
+        )}
+        {imageContributions.length === 0 ? (
+          <div className="catalogue-empty">
+            <ImagePlus size={26} />
+            <strong>No public images awaiting review</strong>
+            <span>Private shop images are never listed here.</span>
+          </div>
+        ) : (
+          <div className="catalogue-image-grid">
+            {imageContributions.map((contribution) => (
+              <article className="catalogue-image-card" key={contribution.id}>
+                <div className="catalogue-image-preview">
+                  {contributionPreviews[contribution.id] ? (
+                    <Image
+                      src={contributionPreviews[contribution.id]}
+                      alt={`${contribution.brand} ${contribution.reference}`}
+                      width={320}
+                      height={240}
+                      unoptimized
+                    />
+                  ) : (
+                    <LoaderCircle className="admin-spin" size={20} />
+                  )}
+                </div>
+                <div className="catalogue-image-details">
+                  <span className={`admin-status-badge status-${contribution.reviewStatus.toLowerCase()}`}>
+                    {contribution.reviewStatus === "PENDING"
+                      ? "Pending administrator review"
+                      : contribution.reviewStatus === "APPROVED"
+                        ? "Approved and shared"
+                        : "Rejected · private to source shop"}
+                  </span>
+                  <strong>{contribution.brand} · {contribution.reference}</strong>
+                  <span>Model: {contribution.model || "Not provided"}</span>
+                  <span>Colour: {contribution.color || "Not provided"}</span>
+                  <span>EAN: {contribution.ean || "Not provided"}</span>
+                  <span>Shop: {contribution.store.nom}</span>
+                  <span>
+                    Uploaded by {contribution.uploader.prenom}{" "}
+                    {contribution.uploader.nom}
+                  </span>
+                  <span>
+                    Source: optician upload · licence: sharing permission covers
+                    Lunetty only; broader usage rights are unknown.
+                  </span>
+                  <span>
+                    Submitted {new Date(contribution.createdAt).toLocaleString()}
+                  </span>
+                  <span>
+                    Sharing authorization:{" "}
+                    {contribution.publicConsentAt ? "confirmed" : "missing"}
+                  </span>
+                  {contribution.reviewedAt && (
+                    <span>
+                      Reviewed {new Date(contribution.reviewedAt).toLocaleString()}
+                      {contribution.reviewer
+                        ? ` by ${contribution.reviewer.prenom} ${contribution.reviewer.nom}`
+                        : ""}
+                    </span>
+                  )}
+                  {contribution.rejectionReason && (
+                    <span>Rejection reason: {contribution.rejectionReason}</span>
+                  )}
+                </div>
+                {contribution.reviewStatus === "PENDING" && (
+                <div className="catalogue-image-actions">
+                  <button
+                    className="admin-button admin-button-primary"
+                    type="button"
+                    disabled={saving || reviewingContributionId !== null}
+                    onClick={() =>
+                      void reviewImageContribution(contribution.id, "verify")
+                    }
+                  >
+                    {reviewingContributionId === contribution.id
+                      ? <LoaderCircle className="admin-spin" size={14} />
+                      : <CheckCircle2 size={14} />}
+                    Verify and share
+                  </button>
+                  <button
+                    className="admin-button admin-button-secondary"
+                    type="button"
+                    disabled={saving || reviewingContributionId !== null}
+                    onClick={() =>
+                      void reviewImageContribution(contribution.id, "reject")
+                    }
+                  >
+                    Reject
+                  </button>
+                </div>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="admin-panel catalogue-products-panel">
         <div className="admin-panel-heading catalogue-panel-heading">
@@ -673,6 +900,12 @@ function ImageCard({
         <strong>{image.variantId ? variant?.colorName || variant?.colorCode || "Variant image" : "Product-wide image"}</strong>
         <small>Source: {image.imageSource}</small>
         <small>Licence: {image.licenseInformation || "Not specified"}</small>
+        <small>Added: {new Date(image.createdAt).toLocaleString()}</small>
+        {image.verifiedBy && (
+          <small>
+            Last verified by: {image.verifiedBy.prenom} {image.verifiedBy.nom}
+          </small>
+        )}
         {image.sourceUrl && <a href={image.sourceUrl} target="_blank" rel="noreferrer">View source</a>}
       </div>
       <div className="catalogue-image-actions">

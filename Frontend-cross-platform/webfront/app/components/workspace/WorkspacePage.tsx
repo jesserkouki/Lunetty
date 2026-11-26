@@ -1105,9 +1105,24 @@ export function WorkspacePage({
             onUpdateThreshold={(stockId, seuil) =>
               run(() => inventoryService.update(auth.storeId, stockId, { seuil_reapprovisionnement: seuil }), "Seuil de réapprovisionnement mis à jour.")
             }
+            onUpdateStock={(stockId, input) =>
+              run(
+                () => inventoryService.update(auth.storeId, stockId, input),
+                "Image de la monture mise à jour.",
+              )
+            }
             onCreateStock={(input) =>
               run(() => inventoryService.create(auth.storeId, input), "Article ajouté à l'inventaire.")
             }
+            onUploadFrameImage={(image, input) =>
+              inventoryService.uploadFrameImage(auth.storeId, image, input)
+            }
+            onReadFrameImage={(imageId) =>
+              inventoryService.readFrameImage(auth.storeId, imageId)
+            }
+            onDeleteFrameImage={async (imageId) => {
+              await inventoryService.deleteFrameImage(auth.storeId, imageId);
+            }}
             onSearchCatalogue={(search) =>
               catalogueService.imageSuggestions(auth.storeId, search)
             }

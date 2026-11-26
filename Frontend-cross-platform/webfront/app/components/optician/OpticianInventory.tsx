@@ -1,13 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import type {
   CatalogueImageSearch,
   CatalogueImageSuggestion,
+  CatalogueImageSuggestionsResponse,
   ExternalImageSearchResponse,
   ExternalImageSuggestion,
+  FrameImageUploadInput,
+  FrameImageUploadResult,
+  PrivateFrameImageSuggestion,
 } from "../../../services/catalogue.service";
 import { formatDate, getMovementTypeBadge } from "./formatters";
 import {
@@ -25,10 +29,20 @@ interface OpticianInventoryProps {
   locationTypesData: unknown;
   onApplyMovement: (stockId: string, input: Record<string, unknown>) => Promise<void>;
   onUpdateThreshold: (stockId: string, threshold: number) => Promise<void>;
+  onUpdateStock: (
+    stockId: string,
+    input: Record<string, unknown>,
+  ) => Promise<void>;
   onCreateStock: (input: Record<string, unknown>) => Promise<void>;
+  onUploadFrameImage: (
+    image: File,
+    input: FrameImageUploadInput,
+  ) => Promise<FrameImageUploadResult>;
+  onReadFrameImage: (imageId: string) => Promise<Blob>;
+  onDeleteFrameImage: (imageId: string) => Promise<void>;
   onSearchCatalogue: (
     search: CatalogueImageSearch,
-  ) => Promise<{ data: CatalogueImageSuggestion[] }>;
+  ) => Promise<CatalogueImageSuggestionsResponse>;
   onSearchExternalCatalogue: (
     search: CatalogueImageSearch,
   ) => Promise<ExternalImageSearchResponse>;
@@ -51,7 +65,11 @@ export function OpticianInventory({
   locationTypesData,
   onApplyMovement,
   onUpdateThreshold,
+  onUpdateStock,
   onCreateStock,
+  onUploadFrameImage,
+  onReadFrameImage,
+  onDeleteFrameImage,
   onSearchCatalogue,
   onSearchExternalCatalogue,
   onSearchPaidCatalogue,
@@ -95,6 +113,58 @@ export function OpticianInventory({
   const [catalogueSuggestions, setCatalogueSuggestions] = useState<
     CatalogueImageSuggestion[]
   >([]);
+  const [privateImageSuggestions, setPrivateImageSuggestions] = useState<
+    PrivateFrameImageSuggestion[]
+  >([]);
+  const [privateImagePreview, setPrivateImagePreview] = useState<string | null>(
+    null,
+  );
+  const [privateImagePreviewError, setPrivateImagePreviewError] = useState("");
+  const privateImagePreviewUrl = useRef<string | null>(null);
+  const [frameImageFile, setFrameImageFile] = useState<File | null>(null);
+  const [frameImageFilePreview, setFrameImageFilePreview] = useState<
+    string | null
+  >(null);
+  const frameImageFilePreviewUrl = useRef<string | null>(null);
+  const frameImageInput = useRef<HTMLInputElement>(null);
+  const editingImageInput = useRef<HTMLInputElement>(null);
+  const [uploadedFrameImage, setUploadedFrameImage] =
+    useState<FrameImageUploadResult | null>(null);
+  const [selectedFrameImage, setSelectedFrameImage] = useState<
+    FrameImageUploadResult | PrivateFrameImageSuggestion | null
+  >(null);
+  const [frameImageVisibility, setFrameImageVisibility] = useState<
+    "PRIVATE" | "PUBLIC"
+  >("PRIVATE");
+  const [confirmPublicSharing, setConfirmPublicSharing] = useState(false);
+  const [frameImageUploading, setFrameImageUploading] = useState(false);
+  const [frameImageUploadError, setFrameImageUploadError] = useState("");
+  const [editingStockImage, setEditingStockImage] =
+    useState<Record<string, unknown> | null>(null);
+  const [editingImageFile, setEditingImageFile] = useState<File | null>(null);
+  const [editingImagePreview, setEditingImagePreview] = useState<string | null>(
+    null,
+  );
+  const [editingStoredImagePreview, setEditingStoredImagePreview] = useState<
+    string | null
+  >(null);
+  const [editingImageError, setEditingImageError] = useState("");
+  const [editingImageBusy, setEditingImageBusy] = useState(false);
+  const [editingImageBrand, setEditingImageBrand] = useState("");
+  const [editingImageReference, setEditingImageReference] = useState("");
+  const [editingCatalogueSuggestions, setEditingCatalogueSuggestions] =
+    useState<CatalogueImageSuggestion[]>([]);
+  const [editingCatalogueSelection, setEditingCatalogueSelection] = useState<{
+    productId: string;
+    variantId: string | null;
+    imageId: string;
+  } | null>(null);
+  const [editingCatalogueSearching, setEditingCatalogueSearching] =
+    useState(false);
+  const [editingCatalogueError, setEditingCatalogueError] = useState("");
+  const editingImagePreviewUrl = useRef<string | null>(null);
+  const editingStoredImagePreviewUrl = useRef<string | null>(null);
+  const editingCatalogueSearchRequestId = useRef(0);
   const [catalogueSearching, setCatalogueSearching] = useState(false);
   const [catalogueError, setCatalogueError] = useState("");
   const [externalSuggestions, setExternalSuggestions] = useState<
@@ -159,6 +229,24 @@ export function OpticianInventory({
   const [initialQty, setInitialQty] = useState<number>(10);
   const [initialThreshold, setInitialThreshold] = useState<number>(3);
 
+  useEffect(
+    () => () => {
+      if (privateImagePreviewUrl.current) {
+        URL.revokeObjectURL(privateImagePreviewUrl.current);
+      }
+      if (frameImageFilePreviewUrl.current) {
+        URL.revokeObjectURL(frameImageFilePreviewUrl.current);
+      }
+      if (editingImagePreviewUrl.current) {
+        URL.revokeObjectURL(editingImagePreviewUrl.current);
+      }
+      if (editingStoredImagePreviewUrl.current) {
+        URL.revokeObjectURL(editingStoredImagePreviewUrl.current);
+      }
+    },
+    [],
+  );
+
   // Edit threshold modal
   const [editThresholdModal, setEditThresholdModal] = useState<{
     stockId: string;
@@ -222,6 +310,52 @@ export function OpticianInventory({
   );
   const internalImage = internalSuggestion?.images[0] ?? null;
   const selectedExternalImage = paidSelection ?? externalSelection;
+  const editingCatalogueImage = editingStockImage?.catalogueImage as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  const editingUploadedImage = editingStockImage?.frameImageUpload as
+    | Record<string, unknown>
+    | null
+    | undefined;
+
+  useEffect(() => {
+    let active = true;
+    const imageId = editingUploadedImage?.id;
+    if (typeof imageId !== "string") {
+      return () => {
+        active = false;
+      };
+    }
+
+    onReadFrameImage(imageId)
+      .then((blob) => {
+        if (!active) return;
+        const previewUrl = URL.createObjectURL(blob);
+        if (editingStoredImagePreviewUrl.current) {
+          URL.revokeObjectURL(editingStoredImagePreviewUrl.current);
+        }
+        editingStoredImagePreviewUrl.current = previewUrl;
+        setEditingStoredImagePreview(previewUrl);
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setEditingImageError(
+            reason instanceof Error
+              ? reason.message
+              : "Impossible d’afficher l’image associée.",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+      if (editingStoredImagePreviewUrl.current) {
+        URL.revokeObjectURL(editingStoredImagePreviewUrl.current);
+        editingStoredImagePreviewUrl.current = null;
+      }
+    };
+  }, [editingUploadedImage?.id, onReadFrameImage]);
   const saveLocationTypeOverride = (type: Record<string, unknown>) => {
     setLocationTypeOverrides((current) => [
       ...current.filter((item) => item.id !== type.id),
@@ -347,6 +481,8 @@ export function OpticianInventory({
     ) {
       setCatalogueError("Indiquez une marque, une référence, un modèle, une couleur ou un EAN.");
       setCatalogueSuggestions([]);
+      setPrivateImageSuggestions([]);
+      clearPrivateImagePreview();
       setCatalogueSearching(false);
       setExternalError("");
       setExternalSuggestions([]);
@@ -360,6 +496,10 @@ export function OpticianInventory({
     setCatalogueSearching(true);
     setCatalogueError("");
     setCatalogueSelection(null);
+    setSelectedFrameImage(null);
+    setPrivateImageSuggestions([]);
+    clearPrivateImagePreview();
+    setPrivateImagePreviewError("");
     setExternalSelection(null);
     setExternalSuggestions([]);
     setExternalProviders([]);
@@ -376,12 +516,19 @@ export function OpticianInventory({
       const response = await onSearchCatalogue(search);
       if (requestId !== catalogueSearchRequestId.current) return;
       setCatalogueSuggestions(response.data);
+      const privateImages = response.privateImages ?? [];
+      setPrivateImageSuggestions(privateImages);
+      if (privateImages[0]) {
+        void loadPrivateImagePreview(privateImages[0].id, requestId);
+      }
       hasInternalImage = response.data.some(
         (suggestion) => suggestion.images.length > 0,
       );
     } catch (reason) {
       if (requestId !== catalogueSearchRequestId.current) return;
       setCatalogueSuggestions([]);
+      setPrivateImageSuggestions([]);
+      clearPrivateImagePreview();
       setCatalogueError(
         reason instanceof Error
           ? reason.message
@@ -410,7 +557,10 @@ export function OpticianInventory({
     setPaidSearching(false);
     setCatalogueSearch((current) => ({ ...current, [field]: value }));
     setCatalogueSuggestions([]);
+    setPrivateImageSuggestions([]);
+    clearPrivateImagePreview();
     setCatalogueSelection(null);
+    setSelectedFrameImage(null);
     setCatalogueError("");
     setExternalSuggestions([]);
     setExternalProviders([]);
@@ -425,14 +575,177 @@ export function OpticianInventory({
     setExternalPersistenceWarning(false);
   }
 
+  function clearPrivateImagePreview() {
+    if (privateImagePreviewUrl.current) {
+      URL.revokeObjectURL(privateImagePreviewUrl.current);
+      privateImagePreviewUrl.current = null;
+    }
+    setPrivateImagePreview(null);
+    setPrivateImagePreviewError("");
+  }
+
+  function clearFrameImageFilePreview() {
+    if (frameImageFilePreviewUrl.current) {
+      URL.revokeObjectURL(frameImageFilePreviewUrl.current);
+      frameImageFilePreviewUrl.current = null;
+    }
+    setFrameImageFilePreview(null);
+  }
+
+  async function loadPrivateImagePreview(imageId: string, requestId: number) {
+    try {
+      const blob = await onReadFrameImage(imageId);
+      if (requestId !== catalogueSearchRequestId.current) return;
+      const previewUrl = URL.createObjectURL(blob);
+      if (privateImagePreviewUrl.current) {
+        URL.revokeObjectURL(privateImagePreviewUrl.current);
+      }
+      privateImagePreviewUrl.current = previewUrl;
+      setPrivateImagePreview(previewUrl);
+      setPrivateImagePreviewError("");
+    } catch (reason) {
+      if (requestId !== catalogueSearchRequestId.current) return;
+      setPrivateImagePreview(null);
+      setPrivateImagePreviewError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible d’afficher l’image privée de la boutique.",
+      );
+    }
+  }
+
+  function chooseFrameImageFile(file: File | undefined) {
+    if (!file) return;
+    if (
+      !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+      file.size > 10 * 1024 * 1024
+    ) {
+      setFrameImageUploadError(
+        "Choisissez une image JPEG, PNG ou WebP de 10 Mo maximum.",
+      );
+      return;
+    }
+    clearFrameImageFilePreview();
+    const previewUrl = URL.createObjectURL(file);
+    frameImageFilePreviewUrl.current = previewUrl;
+    setFrameImageFile(file);
+    setFrameImageFilePreview(previewUrl);
+    setFrameImageUploadError("");
+  }
+
+  async function uploadSelectedFrameImage() {
+    if (!frameImageFile) {
+      setFrameImageUploadError("Choisissez une image à importer.");
+      return;
+    }
+    if (!catalogueSearch.brand?.trim() || !catalogueSearch.reference?.trim()) {
+      setFrameImageUploadError(
+        "Renseignez la marque et la référence avant d’importer l’image.",
+      );
+      return;
+    }
+    if (frameImageVisibility === "PUBLIC" && !confirmPublicSharing) {
+      setFrameImageUploadError(
+        "Confirmez votre autorisation de partager cette image.",
+      );
+      return;
+    }
+
+    setFrameImageUploading(true);
+    setFrameImageUploadError("");
+    try {
+      const result = await onUploadFrameImage(frameImageFile, {
+        brand: catalogueSearch.brand.trim(),
+        reference: catalogueSearch.reference.trim(),
+        model: catalogueSearch.model?.trim() || undefined,
+        color: catalogueSearch.color?.trim() || undefined,
+        ean: catalogueSearch.ean?.trim() || undefined,
+        visibility: frameImageVisibility,
+        ...(frameImageVisibility === "PUBLIC"
+          ? { confirmPublicSharing: true }
+          : {}),
+      });
+      if (
+        uploadedFrameImage &&
+        uploadedFrameImage.id !== result.id
+      ) {
+        try {
+          await onDeleteFrameImage(uploadedFrameImage.id);
+        } catch (reason) {
+          let cleanupMessage = "";
+          try {
+            await onDeleteFrameImage(result.id);
+          } catch (cleanupReason) {
+            cleanupMessage =
+              cleanupReason instanceof Error
+                ? ` La nouvelle image n’a pas pu être supprimée : ${cleanupReason.message}`
+                : " La nouvelle image n’a pas pu être supprimée.";
+          }
+          throw new Error(
+            `${reason instanceof Error ? reason.message : "L’image précédente n’a pas pu être remplacée."}${cleanupMessage}`,
+          );
+        }
+      }
+      setUploadedFrameImage(result);
+      setSelectedFrameImage(result);
+      setCatalogueSelection(null);
+      setExternalSelection(null);
+      setPaidSelection(null);
+      setExternalPersistenceWarning(false);
+      setFrameImageUploadError("");
+    } catch (reason) {
+      setFrameImageUploadError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible d’importer cette image. Réessayez.",
+      );
+    } finally {
+      setFrameImageUploading(false);
+    }
+  }
+
+  async function discardUploadedFrameImage() {
+    if (!uploadedFrameImage) return;
+    await onDeleteFrameImage(uploadedFrameImage.id);
+    setUploadedFrameImage(null);
+    if (selectedFrameImage?.id === uploadedFrameImage.id) {
+      setSelectedFrameImage(null);
+    }
+  }
+
+  async function closeNewStockModal() {
+    if (frameImageUploading) return;
+    try {
+      await discardUploadedFrameImage();
+      clearFrameImageFilePreview();
+      setFrameImageFile(null);
+      setSelectedFrameImage(null);
+      setNewStockOpen(false);
+      setCatalogueStep(false);
+    } catch (reason) {
+      setFrameImageUploadError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible d’annuler l’import. Réessayez.",
+      );
+    }
+  }
+
   async function createStock(
     selection: typeof catalogueSelection,
+    frameImageUploadId: string | null = null,
   ) {
     if (stockSubmitLock.current) return;
     stockSubmitLock.current = true;
     setSubmitting(true);
     setStockSubmitError("");
     try {
+      if (
+        uploadedFrameImage &&
+        uploadedFrameImage.id !== frameImageUploadId
+      ) {
+        await discardUploadedFrameImage();
+      }
       creationRequestId.current ??= crypto.randomUUID();
       await onCreateStock({
         emplacement_id: selectedLocationId,
@@ -459,6 +772,7 @@ export function OpticianInventory({
               catalogueImageId: selection.imageId,
             }
           : {}),
+        ...(frameImageUploadId ? { frameImageUploadId } : {}),
         creationRequestId: creationRequestId.current,
         quantite_disponible: initialQty,
         seuil_reapprovisionnement: initialThreshold,
@@ -466,6 +780,12 @@ export function OpticianInventory({
       setNewStockOpen(false);
       setCatalogueStep(false);
       setCatalogueSelection(null);
+      setSelectedFrameImage(null);
+      setUploadedFrameImage(null);
+      setFrameImageFile(null);
+      clearFrameImageFilePreview();
+      setPrivateImageSuggestions([]);
+      clearPrivateImagePreview();
       setExternalSelection(null);
       setExternalSuggestions([]);
       setExternalProviders([]);
@@ -484,6 +804,243 @@ export function OpticianInventory({
     } finally {
       stockSubmitLock.current = false;
       setSubmitting(false);
+    }
+  }
+
+  function openStockImageEditor(
+    item: Record<string, unknown>,
+    title: string,
+  ) {
+    const catalogueProduct = item.catalogueProduct as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    const uploadedImage = item.frameImageUpload as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    const reference =
+      catalogueProduct?.reference ?? uploadedImage?.reference ?? item.marque_reference;
+    setEditingImageBrand(
+      String(catalogueProduct?.brand ?? uploadedImage?.brand ?? ""),
+    );
+    setEditingImageReference(String(reference ?? ""));
+    setEditingStockImage({ ...item, title });
+    setEditingImageFile(null);
+    setEditingImageError("");
+    setEditingCatalogueSuggestions([]);
+    setEditingCatalogueSelection(null);
+    setEditingCatalogueError("");
+    editingCatalogueSearchRequestId.current += 1;
+    setEditingStoredImagePreview(null);
+    if (editingImagePreviewUrl.current) {
+      URL.revokeObjectURL(editingImagePreviewUrl.current);
+      editingImagePreviewUrl.current = null;
+    }
+    if (editingStoredImagePreviewUrl.current) {
+      URL.revokeObjectURL(editingStoredImagePreviewUrl.current);
+      editingStoredImagePreviewUrl.current = null;
+    }
+    setEditingImagePreview(null);
+  }
+
+  function closeStockImageEditor() {
+    if (editingImageBusy) return;
+    editingCatalogueSearchRequestId.current += 1;
+    setEditingStockImage(null);
+    setEditingImageFile(null);
+    setEditingImageError("");
+    setEditingCatalogueSuggestions([]);
+    setEditingCatalogueSelection(null);
+    setEditingCatalogueError("");
+    setEditingStoredImagePreview(null);
+    if (editingImagePreviewUrl.current) {
+      URL.revokeObjectURL(editingImagePreviewUrl.current);
+      editingImagePreviewUrl.current = null;
+    }
+    if (editingStoredImagePreviewUrl.current) {
+      URL.revokeObjectURL(editingStoredImagePreviewUrl.current);
+      editingStoredImagePreviewUrl.current = null;
+    }
+    setEditingImagePreview(null);
+  }
+
+  function chooseEditingImageFile(file: File | undefined) {
+    if (!file) return;
+    if (
+      !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+      file.size > 10 * 1024 * 1024
+    ) {
+      setEditingImageError(
+        "Choisissez une image JPEG, PNG ou WebP de 10 Mo maximum.",
+      );
+      return;
+    }
+    if (editingImagePreviewUrl.current) {
+      URL.revokeObjectURL(editingImagePreviewUrl.current);
+    }
+    const previewUrl = URL.createObjectURL(file);
+    editingImagePreviewUrl.current = previewUrl;
+    setEditingImageFile(file);
+    setEditingImagePreview(previewUrl);
+    setEditingCatalogueSelection(null);
+    setEditingImageError("");
+  }
+
+  async function searchEditingCatalogueImages() {
+    const requestId = ++editingCatalogueSearchRequestId.current;
+    const brand = editingImageBrand.trim();
+    const reference = editingImageReference.trim();
+    setEditingCatalogueSelection(null);
+    if (!brand && !reference) {
+      setEditingCatalogueError("Indiquez une marque ou une référence.");
+      setEditingCatalogueSuggestions([]);
+      return;
+    }
+
+    setEditingCatalogueSearching(true);
+    setEditingCatalogueError("");
+    setEditingCatalogueSuggestions([]);
+    try {
+      const response = await onSearchCatalogue({ brand, reference });
+      if (requestId !== editingCatalogueSearchRequestId.current) return;
+      setEditingCatalogueSuggestions(
+        response.data.filter((suggestion) => suggestion.images.length > 0),
+      );
+    } catch (reason) {
+      if (requestId !== editingCatalogueSearchRequestId.current) return;
+      setEditingCatalogueError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible de rechercher des images vérifiées.",
+      );
+    } finally {
+      if (requestId === editingCatalogueSearchRequestId.current) {
+        setEditingCatalogueSearching(false);
+      }
+    }
+  }
+
+  function chooseEditingCatalogueImage(
+    suggestion: CatalogueImageSuggestion,
+    imageId: string,
+  ) {
+    setEditingCatalogueSelection({
+      productId: suggestion.product.id,
+      variantId: suggestion.variant?.id ?? null,
+      imageId,
+    });
+    setEditingImageFile(null);
+    setEditingImagePreview(null);
+    if (editingImagePreviewUrl.current) {
+      URL.revokeObjectURL(editingImagePreviewUrl.current);
+      editingImagePreviewUrl.current = null;
+    }
+    setEditingImageError("");
+  }
+
+  async function replaceStockImage() {
+    if (!editingStockImage || (!editingImageFile && !editingCatalogueSelection)) {
+      return;
+    }
+    if (editingCatalogueSelection) {
+      setEditingImageBusy(true);
+      setEditingImageError("");
+      try {
+        await onUpdateStock(String(editingStockImage.id), {
+          seuil_reapprovisionnement: Number(
+            editingStockImage.seuil_reapprovisionnement ?? 0,
+          ),
+          catalogueProductId: editingCatalogueSelection.productId,
+          catalogueVariantId: editingCatalogueSelection.variantId,
+          catalogueImageId: editingCatalogueSelection.imageId,
+          frameImageUploadId: null,
+        });
+        setEditingStockImage(null);
+        setEditingCatalogueSelection(null);
+      } catch (reason) {
+        setEditingImageError(
+          reason instanceof Error
+            ? reason.message
+            : "Impossible de remplacer l’image du stock.",
+        );
+      } finally {
+        setEditingImageBusy(false);
+      }
+      return;
+    }
+    if (!editingImageFile) return;
+    if (!editingImageBrand.trim() || !editingImageReference.trim()) {
+      setEditingImageError("Renseignez la marque et la référence de la monture.");
+      return;
+    }
+
+    setEditingImageBusy(true);
+    setEditingImageError("");
+    let uploadedImage: FrameImageUploadResult | null = null;
+    try {
+      uploadedImage = await onUploadFrameImage(editingImageFile, {
+        brand: editingImageBrand.trim(),
+        reference: editingImageReference.trim(),
+        visibility: "PRIVATE",
+      });
+      await onUpdateStock(String(editingStockImage.id), {
+        seuil_reapprovisionnement: Number(
+          editingStockImage.seuil_reapprovisionnement ?? 0,
+        ),
+        catalogueImageId: null,
+        frameImageUploadId: uploadedImage.id,
+      });
+      setEditingStockImage(null);
+      setEditingImageFile(null);
+      setEditingImagePreview(null);
+      setEditingStoredImagePreview(null);
+      if (editingImagePreviewUrl.current) {
+        URL.revokeObjectURL(editingImagePreviewUrl.current);
+        editingImagePreviewUrl.current = null;
+      }
+    } catch (reason) {
+      let cleanupFailure = "";
+      if (uploadedImage) {
+        try {
+          await onDeleteFrameImage(uploadedImage.id);
+        } catch (cleanupReason) {
+          cleanupFailure =
+            cleanupReason instanceof Error
+              ? ` L’import temporaire n’a pas pu être supprimé : ${cleanupReason.message}`
+              : " L’import temporaire n’a pas pu être supprimé.";
+        }
+      }
+      setEditingImageError(
+        `${reason instanceof Error ? reason.message : "Impossible de remplacer l’image du stock."}${cleanupFailure}`,
+      );
+    } finally {
+      setEditingImageBusy(false);
+    }
+  }
+
+  async function removeStockImage() {
+    if (!editingStockImage) return;
+    setEditingImageBusy(true);
+    setEditingImageError("");
+    try {
+      await onUpdateStock(String(editingStockImage.id), {
+        seuil_reapprovisionnement: Number(
+          editingStockImage.seuil_reapprovisionnement ?? 0,
+        ),
+        catalogueImageId: null,
+        frameImageUploadId: null,
+      });
+      setEditingStockImage(null);
+      setEditingStoredImagePreview(null);
+    } catch (reason) {
+      setEditingImageError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible de retirer l’image de ce stock.",
+      );
+    } finally {
+      setEditingImageBusy(false);
     }
   }
 
@@ -564,9 +1121,17 @@ export function OpticianInventory({
                 setCatalogueStep(false);
                 setCatalogueSearch({ reference: "" });
                 setCatalogueSuggestions([]);
+                setPrivateImageSuggestions([]);
+                clearPrivateImagePreview();
                 setCatalogueSearching(false);
                 setCatalogueError("");
                 setCatalogueSelection(null);
+                setSelectedFrameImage(null);
+                setFrameImageFile(null);
+                clearFrameImageFilePreview();
+                setFrameImageVisibility("PRIVATE");
+                setConfirmPublicSharing(false);
+                setFrameImageUploadError("");
                 setExternalSuggestions([]);
                 setExternalProviders([]);
                 setExternalWarnings([]);
@@ -657,6 +1222,8 @@ export function OpticianInventory({
                     const qty = Number(item.quantite_disponible ?? 0);
                     const reserved = Number(item.quantite_reservee ?? 0);
                     const threshold = Number(item.seuil_reapprovisionnement ?? 0);
+                    const hasCatalogueImage = Boolean(item.catalogueImageId);
+                    const hasUploadedImage = Boolean(item.frameImageUploadId);
 
                     const isOut = qty <= 0;
                     const isLow = !isOut && qty <= threshold;
@@ -667,6 +1234,15 @@ export function OpticianInventory({
                           <div className="opt-table-cell-title">
                             <strong>{title}</strong>
                             <span className="opt-table-cell-sub">{sku}</span>
+                            {item.type_article === "MONTURE" && (
+                              <span className="opt-table-cell-sub">
+                                {hasCatalogueImage
+                                  ? "Verified catalogue image"
+                                  : hasUploadedImage
+                                    ? "Shop image attached"
+                                    : "No image"}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td data-label="Emplacement">
@@ -708,6 +1284,17 @@ export function OpticianInventory({
                         {!readOnly && (
                           <td data-label="Actions" style={{ textAlign: "right" }}>
                             <div className="opt-row-action-group">
+                              {item.type_article === "MONTURE" && (
+                                <button
+                                  className="button secondary small"
+                                  type="button"
+                                  onClick={() =>
+                                    openStockImageEditor(item, title)
+                                  }
+                                >
+                                  Image
+                                </button>
+                              )}
                               <button
                                 className="button secondary small"
                                 onClick={() => setMovementModal({
@@ -910,7 +1497,9 @@ export function OpticianInventory({
         <div
           className="opt-modal-overlay"
           style={{ display: newLocationOpen || manageTypesOpen ? "none" : undefined }}
-          onClick={() => setNewStockOpen(false)}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) void closeNewStockModal();
+          }}
           role="dialog"
           aria-modal="true"
         >
@@ -932,7 +1521,12 @@ export function OpticianInventory({
                   </p>
                 </div>
               </div>
-              <button className="opt-modal-close" onClick={() => setNewStockOpen(false)} type="button">
+              <button
+                className="opt-modal-close"
+                onClick={() => void closeNewStockModal()}
+                type="button"
+                disabled={frameImageUploading || submitting}
+              >
                 <IconX height={18} width={18} />
               </button>
             </div>
@@ -1014,9 +1608,7 @@ export function OpticianInventory({
                   )}
                   {catalogueSelection && (
                     <p className="catalogue-selection-confirmation" role="status">
-                      Image vérifiée sélectionnée. Le produit et la variante
-                      seront liés au stock, mais l’identifiant précis de
-                      l’image ne sera pas enregistré.
+                      Image vérifiée sélectionnée. Elle sera associée au stock.
                     </p>
                   )}
                   {externalSelection && (
@@ -1124,6 +1716,7 @@ export function OpticianInventory({
                                             suggestion.variant?.id ?? null,
                                           imageId: image.id,
                                         });
+                                        setSelectedFrameImage(null);
                                         setExternalSelection(null);
                                         setPaidSelection(null);
                                         setExternalPersistenceWarning(false);
@@ -1148,6 +1741,76 @@ export function OpticianInventory({
                             </span>
                           </div>
                         )
+                      )}
+
+                      {privateImageSuggestions[0] && (
+                        <section className="catalogue-result-section">
+                          <div className="catalogue-result-heading">
+                            <div>
+                              <strong>Image privée de cette boutique</strong>
+                              <span>
+                                Visible uniquement aux membres autorisés de
+                                votre boutique · non vérifiée par Lunetty.
+                              </span>
+                            </div>
+                          </div>
+                          {privateImagePreviewError && (
+                            <p className="catalogue-external-error" role="alert">
+                              {privateImagePreviewError}
+                            </p>
+                          )}
+                          {privateImagePreview && (
+                            <div className="catalogue-image-grid">
+                              <article
+                                className={`catalogue-image-card${selectedFrameImage?.id === privateImageSuggestions[0].id ? " selected" : ""}`}
+                              >
+                                <div className="catalogue-image-preview">
+                                  <Image
+                                    src={privateImagePreview}
+                                    alt={`${privateImageSuggestions[0].brand} ${privateImageSuggestions[0].reference}`}
+                                    width={320}
+                                    height={240}
+                                    unoptimized
+                                  />
+                                </div>
+                                <div className="catalogue-image-details">
+                                  <span className="catalogue-match-badge approximate">
+                                    Image privée · non vérifiée
+                                  </span>
+                                  <strong>{privateImageSuggestions[0].brand}</strong>
+                                  <span>
+                                    {privateImageSuggestions[0].model ||
+                                      "Modèle non renseigné"}
+                                  </span>
+                                  <span>
+                                    Réf. {privateImageSuggestions[0].reference}
+                                  </span>
+                                  <span>
+                                    {privateImageSuggestions[0].color
+                                      ? `Couleur : ${privateImageSuggestions[0].color}`
+                                      : "Couleur non renseignée"}
+                                  </span>
+                                  <button
+                                    className={`button ${selectedFrameImage?.id === privateImageSuggestions[0].id ? "primary" : "secondary"} catalogue-select-button`}
+                                    type="button"
+                                    aria-pressed={selectedFrameImage?.id === privateImageSuggestions[0].id}
+                                    onClick={() => {
+                                      setSelectedFrameImage(privateImageSuggestions[0]);
+                                      setCatalogueSelection(null);
+                                      setExternalSelection(null);
+                                      setPaidSelection(null);
+                                      setExternalPersistenceWarning(false);
+                                    }}
+                                  >
+                                    {selectedFrameImage?.id === privateImageSuggestions[0].id
+                                      ? "Image privée sélectionnée"
+                                      : "Sélectionner cette image"}
+                                  </button>
+                                </div>
+                              </article>
+                            </div>
+                          )}
+                        </section>
                       )}
 
                       {externalStep && (
@@ -1358,6 +2021,7 @@ export function OpticianInventory({
                                           setExternalSelection(result);
                                           setPaidSelection(null);
                                           setCatalogueSelection(null);
+                                          setSelectedFrameImage(null);
                                           setExternalPersistenceWarning(false);
                                         }}
                                       >
@@ -1501,6 +2165,7 @@ export function OpticianInventory({
                                           setPaidSelection(result);
                                           setExternalSelection(null);
                                           setCatalogueSelection(null);
+                                          setSelectedFrameImage(null);
                                           setExternalPersistenceWarning(false);
                                         }}
                                       >
@@ -1523,19 +2188,125 @@ export function OpticianInventory({
                       )}
 
                       <section className="catalogue-upload-option">
-                        <button
-                          className="button secondary"
-                          type="button"
-                          disabled
-                          title="Le stockage et l’association d’images au stock ne sont pas disponibles."
-                        >
-                          Upload my own image
-                        </button>
-                        <span>
-                          Le serveur ne dispose pas encore d’un stockage
-                          d’images associé au stock. L’import manuel est donc
-                          désactivé pour éviter de perdre votre image.
-                        </span>
+                        <div className="catalogue-upload-heading">
+                          <strong>Upload my own image</strong>
+                          <span>
+                            L’image sera stockée dans les fichiers de votre
+                            boutique et liée au stock créé.
+                          </span>
+                        </div>
+                        <label className="catalogue-upload-visibility">
+                          Visibilité de l’image
+                          <select
+                            value={frameImageVisibility}
+                            disabled={frameImageUploading}
+                            onChange={(event) => {
+                              const visibility = event.target.value as
+                                | "PRIVATE"
+                                | "PUBLIC";
+                              setFrameImageVisibility(visibility);
+                              if (visibility !== "PUBLIC") {
+                                setConfirmPublicSharing(false);
+                              }
+                              setFrameImageUploadError("");
+                            }}
+                          >
+                            <option value="PRIVATE">Private · this shop only</option>
+                            <option value="PUBLIC">
+                              Public · submit to shared catalogue review
+                            </option>
+                          </select>
+                        </label>
+                        {frameImageVisibility === "PUBLIC" && (
+                          <label className="catalogue-public-consent">
+                            <input
+                              type="checkbox"
+                              checked={confirmPublicSharing}
+                              disabled={frameImageUploading}
+                              onChange={(event) =>
+                                setConfirmPublicSharing(event.target.checked)
+                              }
+                            />
+                            <span>
+                              I have permission to share this image with
+                              Lunetty’s shared catalogue. It will remain
+                              unavailable to other shops until an administrator
+                              approves it.
+                            </span>
+                          </label>
+                        )}
+                        <input
+                          ref={frameImageInput}
+                          className="catalogue-upload-file-input"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          aria-label="Choose a frame image"
+                          onChange={(event) => {
+                            chooseFrameImageFile(event.target.files?.[0]);
+                            event.currentTarget.value = "";
+                          }}
+                        />
+                        <div className="catalogue-upload-actions">
+                          <button
+                            className="button secondary"
+                            type="button"
+                            disabled={!canCreateStock || frameImageUploading}
+                            onClick={() => frameImageInput.current?.click()}
+                          >
+                            {uploadedFrameImage ? "Replace image" : "Choose image"}
+                          </button>
+                          <button
+                            className="button primary"
+                            type="button"
+                            disabled={
+                              !canCreateStock ||
+                              frameImageUploading ||
+                              !frameImageFile
+                            }
+                            onClick={() => void uploadSelectedFrameImage()}
+                          >
+                            {frameImageUploading
+                              ? "Uploading…"
+                              : uploadedFrameImage
+                                ? "Upload replacement and select"
+                                : "Upload and select image"}
+                          </button>
+                        </div>
+                        {frameImageFilePreview && (
+                          <div className="catalogue-upload-preview">
+                            <Image
+                              src={frameImageFilePreview}
+                              alt="Preview of the selected frame image"
+                              width={160}
+                              height={120}
+                              unoptimized
+                            />
+                            <div>
+                              <strong>{frameImageFile?.name}</strong>
+                              {uploadedFrameImage && (
+                                <span>
+                                  {uploadedFrameImage.visibility === "PUBLIC"
+                                    ? "Public contribution · awaiting administrator review"
+                                    : "Private image · saved for this shop"}
+                                </span>
+                              )}
+                              {selectedFrameImage?.id === uploadedFrameImage?.id && (
+                                <span>Selected for the new stock record.</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {frameImageUploadError && (
+                          <p className="catalogue-external-error" role="alert">
+                            {frameImageUploadError}
+                          </p>
+                        )}
+                        <p className="catalogue-provider-notice">
+                          Public contributions are not searchable by other
+                          shops and are not administrator-verified until
+                          approved. Uploading does not grant a broader
+                          commercial licence.
+                        </p>
                       </section>
                     </>
                   )}
@@ -1751,7 +2522,7 @@ export function OpticianInventory({
                     <button
                       className="button secondary"
                       type="button"
-                      disabled={submitting}
+                      disabled={submitting || frameImageUploading}
                       onClick={async () => {
                         setSubmitting(true);
                         setLocationCrudError("");
@@ -2006,7 +2777,7 @@ export function OpticianInventory({
                                   <button
                                     className="button secondary"
                                     type="button"
-                                    disabled={submitting}
+                                    disabled={submitting || frameImageUploading}
                                     onClick={async () => {
                                       setSubmitting(true);
                                       setLocationCrudError("");
@@ -2161,7 +2932,7 @@ export function OpticianInventory({
                     className="button secondary"
                     onClick={() => setCatalogueStep(false)}
                     type="button"
-                    disabled={submitting}
+                    disabled={submitting || frameImageUploading}
                   >
                     Retour au formulaire
                   </button>
@@ -2175,7 +2946,7 @@ export function OpticianInventory({
                       void createStock(null);
                     }}
                     type="button"
-                    disabled={submitting}
+                    disabled={submitting || frameImageUploading}
                   >
                     {submitting ? "Création…" : "Continuer sans image"}
                   </button>
@@ -2183,32 +2954,40 @@ export function OpticianInventory({
                     className="button primary"
                     disabled={
                       submitting ||
-                      (!catalogueSelection && !selectedExternalImage)
+                      frameImageUploading ||
+                      (!catalogueSelection &&
+                        !selectedExternalImage &&
+                        !selectedFrameImage)
                     }
                     onClick={() => {
-                      if (selectedExternalImage || catalogueSelection) {
+                      if (selectedFrameImage) {
+                        void createStock(null, selectedFrameImage.id);
+                        return;
+                      }
+                      if (selectedExternalImage) {
                         setExternalPersistenceWarning(true);
                         return;
                       }
-                      if (catalogueSelection) {
-                        void createStock(catalogueSelection);
-                      }
+                      if (catalogueSelection) void createStock(catalogueSelection);
                     }}
                     type="button"
                   >
                     {submitting
                       ? "Création…"
-                      : selectedExternalImage
+                      : selectedFrameImage
+                        ? "Créer avec l’image sélectionnée"
+                        : selectedExternalImage
                         ? "Créer sans image externe"
-                        : "Créer le stock"}
+                        : "Créer avec l’image sélectionnée"}
                   </button>
                 </>
               ) : (
                 <>
                   <button
                     className="button secondary"
-                    onClick={() => setNewStockOpen(false)}
+                    onClick={() => void closeNewStockModal()}
                     type="button"
+                    disabled={submitting || frameImageUploading}
                   >
                     Annuler
                   </button>
@@ -2247,12 +3026,12 @@ export function OpticianInventory({
                 <strong>
                   {selectedExternalImage
                     ? "L’image externe ne sera pas enregistrée"
-                    : "L’image catalogue ne sera pas enregistrée sur le stock"}
+                    : ""}
                 </strong>
                 <span>
                   {selectedExternalImage
                     ? "Le stock sera créé sans image. La source et la licence de ce résultat ne peuvent pas être conservées dans le modèle actuel."
-                    : "Le produit et la variante seront liés au stock et la sélection restera validée, mais le modèle actuel ne stocke pas l’identifiant de l’image sur le stock."}
+                    : ""}
                 </span>
                 <div>
                   <button
@@ -2269,16 +3048,12 @@ export function OpticianInventory({
                     disabled={submitting}
                     onClick={() => {
                       setExternalPersistenceWarning(false);
-                      void createStock(
-                        selectedExternalImage ? null : catalogueSelection,
-                      );
+                      void createStock(null);
                     }}
                   >
                     {submitting
                       ? "Création…"
-                      : selectedExternalImage
-                        ? "Confirmer sans image"
-                        : "Confirmer sans enregistrer l’image"}
+                      : "Confirmer sans image"}
                   </button>
                 </div>
               </div>
@@ -2293,6 +3068,274 @@ export function OpticianInventory({
       )}
 
       {/* Modal: Edit Threshold */}
+      {editingStockImage && (
+        <div
+          className="opt-modal-overlay"
+          onClick={closeStockImageEditor}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="stock-image-editor-title"
+        >
+          <div
+            className="opt-modal-card large"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="opt-modal-header">
+              <div className="opt-modal-title-wrap">
+                <div className="opt-icon-bubble">
+                  <IconInventory height={18} width={18} />
+                </div>
+                <div>
+                  <h3 id="stock-image-editor-title">Image de la monture</h3>
+                  <p className="opt-modal-sub">
+                    {String(editingStockImage.title ?? "")}
+                  </p>
+                </div>
+              </div>
+              <button
+                className="opt-modal-close"
+                onClick={closeStockImageEditor}
+                type="button"
+                disabled={editingImageBusy}
+                aria-label="Fermer la gestion d’image"
+              >
+                <IconX height={18} width={18} />
+              </button>
+            </div>
+            <div className="opt-modal-body catalogue-selection-step">
+              {editingCatalogueSelection ? (
+                <div className="catalogue-upload-preview">
+                  {(() => {
+                    const selectedSuggestion = editingCatalogueSuggestions.find(
+                      (suggestion) =>
+                        suggestion.product.id ===
+                          editingCatalogueSelection.productId &&
+                        (suggestion.variant?.id ?? null) ===
+                          editingCatalogueSelection.variantId,
+                    );
+                    const selectedImage = selectedSuggestion?.images.find(
+                      (image) => image.id === editingCatalogueSelection.imageId,
+                    );
+                    return selectedSuggestion && selectedImage ? (
+                      <>
+                        <Image
+                          src={selectedImage.imageUrl}
+                          alt={`Image vérifiée ${selectedSuggestion.product.brand} ${selectedSuggestion.product.reference}`}
+                          width={240}
+                          height={180}
+                          unoptimized
+                        />
+                        <strong>
+                          Image vérifiée prête à associer ·{" "}
+                          {selectedSuggestion.product.brand}{" "}
+                          {selectedSuggestion.product.reference}
+                        </strong>
+                      </>
+                    ) : (
+                      <strong>Image vérifiée sélectionnée</strong>
+                    );
+                  })()}
+                </div>
+              ) : editingImagePreview ? (
+                <div className="catalogue-upload-preview">
+                  <Image
+                    src={editingImagePreview}
+                    alt="Aperçu de la nouvelle image"
+                    width={240}
+                    height={180}
+                    unoptimized
+                  />
+                  <strong>{editingImageFile?.name}</strong>
+                </div>
+              ) : editingStoredImagePreview ||
+                (typeof editingCatalogueImage?.imageUrl === "string" &&
+                  editingCatalogueImage.imageUrl) ? (
+                <div className="catalogue-upload-preview">
+                  <Image
+                    src={
+                      editingStoredImagePreview ??
+                      String(editingCatalogueImage?.imageUrl)
+                    }
+                    alt={`Image associée à ${String(editingStockImage.title ?? "la monture")}`}
+                    width={240}
+                    height={180}
+                    unoptimized
+                  />
+                  <div>
+                    <strong>
+                      {editingUploadedImage
+                        ? "Image de la boutique"
+                        : "Image du catalogue partagé"}
+                    </strong>
+                    <span>
+                      {editingUploadedImage
+                        ? editingUploadedImage.reviewStatus === "PENDING"
+                          ? "Contribution publique en attente de vérification"
+                          : editingUploadedImage.visibility === "PRIVATE"
+                            ? "Image privée, visible dans cette boutique"
+                            : "Contribution partagée approuvée"
+                        : editingCatalogueImage?.isVerified
+                          ? "Image vérifiée par un administrateur"
+                          : "Image catalogue non vérifiée"}
+                    </span>
+                    {typeof editingCatalogueImage?.licenseInformation === "string" &&
+                      editingCatalogueImage.licenseInformation && (
+                      <span>
+                        Licence : {String(editingCatalogueImage.licenseInformation)}
+                      </span>
+                      )}
+                  </div>
+                </div>
+              ) : (
+                <div className="catalogue-empty">
+                  <IconInventory height={28} width={28} />
+                  <strong>Aucune image associée</strong>
+                  <span>L’image est facultative et peut être ajoutée plus tard.</span>
+                </div>
+              )}
+              {editingUploadedImage && !editingStoredImagePreview && (
+                <p className="error-message" role="status">
+                  Chargement de l’image enregistrée…
+                </p>
+              )}
+              <label className="field">
+                <span>Marque de la monture</span>
+                <input
+                  value={editingImageBrand}
+                  onChange={(event) => setEditingImageBrand(event.target.value)}
+                  maxLength={120}
+                  disabled={editingImageBusy}
+                />
+              </label>
+              <label className="field">
+                <span>Référence de la monture</span>
+                <input
+                  value={editingImageReference}
+                  onChange={(event) =>
+                    setEditingImageReference(event.target.value)
+                  }
+                  maxLength={160}
+                  disabled={editingImageBusy}
+                />
+              </label>
+              <input
+                ref={editingImageInput}
+                className="catalogue-upload-file-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                aria-label="Choisir une image de remplacement"
+                onChange={(event) => {
+                  chooseEditingImageFile(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <button
+                className="button secondary catalogue-search-button"
+                type="button"
+                disabled={editingImageBusy || editingCatalogueSearching}
+                onClick={() => void searchEditingCatalogueImages()}
+              >
+                {editingCatalogueSearching
+                  ? "Recherche d’images vérifiées…"
+                  : "Rechercher une image vérifiée"}
+              </button>
+              {editingCatalogueError && (
+                <p className="catalogue-external-error" role="alert">
+                  {editingCatalogueError}
+                </p>
+              )}
+              {editingCatalogueSuggestions.map((suggestion) => (
+                <section
+                  className="catalogue-result-section"
+                  key={`${suggestion.product.id}-${suggestion.variant?.id ?? "product"}`}
+                >
+                  <div className="catalogue-result-heading">
+                    <div>
+                      <strong>
+                        {suggestion.product.brand} {suggestion.product.reference}
+                      </strong>
+                      <span>
+                        {suggestion.variant?.colorName ??
+                          suggestion.variant?.colorCode ??
+                          "Image produit"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="catalogue-image-grid">
+                    {suggestion.images.map((image) => (
+                      <button
+                        className={`catalogue-image-card${editingCatalogueSelection?.imageId === image.id ? " selected" : ""}`}
+                        key={image.id}
+                        type="button"
+                        disabled={editingImageBusy}
+                        onClick={() =>
+                          chooseEditingCatalogueImage(suggestion, image.id)
+                        }
+                      >
+                        <div className="catalogue-image-preview">
+                          <Image
+                            src={image.imageUrl}
+                            alt={`${suggestion.product.brand} ${suggestion.product.reference}`}
+                            width={240}
+                            height={150}
+                            unoptimized
+                          />
+                        </div>
+                        <span>Image vérifiée · sélectionner</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
+              {editingImageError && (
+                <p className="catalogue-external-error" role="alert">
+                  {editingImageError}
+                </p>
+              )}
+              <p className="catalogue-provider-notice">
+                Remplacer ou retirer l’image de ce stock ne modifie pas le
+                catalogue partagé et ne supprime pas les fichiers encore utilisés.
+              </p>
+            </div>
+            <div className="opt-modal-footer">
+              {(editingCatalogueImage || editingUploadedImage) && (
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={editingImageBusy}
+                  onClick={() => void removeStockImage()}
+                >
+                  Retirer de ce stock
+                </button>
+              )}
+              <button
+                className="button secondary"
+                type="button"
+                disabled={editingImageBusy}
+                onClick={() => editingImageInput.current?.click()}
+              >
+                Choisir une image
+              </button>
+              <button
+                className="button primary"
+                type="button"
+                disabled={
+                  editingImageBusy ||
+                  (!editingImageFile && !editingCatalogueSelection)
+                }
+                onClick={() => void replaceStockImage()}
+              >
+                {editingImageBusy
+                  ? "Enregistrement…"
+                  : editingCatalogueSelection
+                    ? "Associer l’image vérifiée"
+                    : "Remplacer l’image"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editThresholdModal && (
         <div className="opt-modal-overlay" onClick={() => setEditThresholdModal(null)} role="dialog" aria-modal="true">
           <div className="opt-modal-card" onClick={(e) => e.stopPropagation()}>

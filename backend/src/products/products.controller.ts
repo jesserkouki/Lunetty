@@ -3,11 +3,13 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -25,6 +27,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PlatformRoles } from '../common/decorators/platform-roles.decorator';
 import { PlatformRolesGuard } from '../common/guards/platform-roles.guard';
 import { ProductImageSearchService } from '../catalogue/product-image-search.service';
+import { FrameImageUploadService } from '../catalogue/frame-image-upload.service';
 import { ProductImageSuggestionsDto } from '../catalogue/dto/product-image-suggestions.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductVariantDto } from './dto/create-product-variant.dto';
@@ -40,6 +43,7 @@ export class ProductsController {
     private readonly products: ProductsService,
     private readonly imageSearch: ProductImageSearchService,
     private readonly externalImageSearch: ExternalImageSearchService,
+    private readonly frameImages: FrameImageUploadService,
   ) {}
 
   @Get('image-suggestions')
@@ -83,6 +87,16 @@ export class ProductsController {
     @Query() query: ProductImageSuggestionsDto,
   ) {
     return this.externalImageSearch.paidSuggestions(user.id, query);
+  }
+
+  @Get('catalogue-image/:id')
+  @Header('Content-Type', 'image/webp')
+  @Header('Cache-Control', 'public, max-age=3600')
+  @ApiOperation({
+    summary: 'Serve an administrator-approved public frame image',
+  })
+  async catalogueImage(@Param('id', ParseUUIDPipe) id: string) {
+    return new StreamableFile(await this.frameImages.readPublicImage(id));
   }
 
   @Get()

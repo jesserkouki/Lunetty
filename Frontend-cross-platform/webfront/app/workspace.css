@@ -1694,15 +1694,91 @@
 
 .catalogue-upload-option {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
   border: 1px dashed var(--workspace-border);
   border-radius: 12px;
   padding: 14px;
   color: var(--workspace-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.catalogue-upload-heading,
+.catalogue-upload-visibility {
+  display: grid;
+  gap: 6px;
+}
+
+.catalogue-upload-heading strong {
+  color: var(--workspace-text);
+}
+
+.catalogue-upload-visibility {
+  max-width: 420px;
+  font-weight: 600;
+}
+
+.catalogue-upload-visibility select {
+  min-height: 40px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 10px;
+  color: var(--workspace-text);
+}
+
+.catalogue-public-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--workspace-text);
+}
+
+.catalogue-public-consent input {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.catalogue-upload-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.catalogue-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalogue-upload-preview {
+  display: grid;
+  grid-template-columns: minmax(90px, 160px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+  color: var(--workspace-text);
+}
+
+.catalogue-upload-preview img {
+  width: 100%;
+  max-height: 120px;
+  border-radius: 7px;
+  object-fit: contain;
+  background: #f2eee7;
+}
+
+.catalogue-upload-preview > div {
+  display: grid;
+  gap: 5px;
 }
 
 .catalogue-upload-option .button:disabled {

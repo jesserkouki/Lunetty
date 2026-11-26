@@ -72,6 +72,18 @@ enum TypeProduit {
   @@map("ProductType")
 }
 
+enum FrameImageVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum FrameImageReviewStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum StatutProduit {
   BROUILLON @map("DRAFT")
   ACTIVE
@@ -385,6 +397,8 @@ model Utilisateur {
   campagnes_publicitaires         CampagnePublicitaire[]     @relation("AuteurCampagnePublicitaire")
   publicites_creees               PublicitePlateforme[]      @relation("AuteurPublicitePlateforme")
   images_catalogue_verifiees      CatalogueProductImage[]    @relation("CatalogueImageVerifier")
+  frameImagesUploaded             FrameImageUpload[]         @relation("FrameImageUploader")
+  frameImagesReviewed             FrameImageUpload[]         @relation("FrameImageReviewer")
 
   @@index([statut, supprime_le])
   @@map("utilisateurs")
@@ -449,6 +463,7 @@ model Magasin {
   plateforme_abonnement AttributionPlanPlateforme? @relation("MagasinPlan")
   utilisations_ia       UtilisationIA[]
   clics                 ClicMagasin[]
+  frameImageUploads     FrameImageUpload[]
 
   @@index([statut, supprime_le])
   @@map("magasins")
@@ -685,10 +700,11 @@ model VarianteAnnonceMagasin {
 
 model Stock {
   id                        String                   @id @default(uuid()) @db.Uuid
-  creationRequestId         String?                 @unique @map("creation_request_id") @db.Uuid
+  creationRequestId         String?                  @unique @map("creation_request_id") @db.Uuid
   storeListingVariantId     String?                  @map("store_listing_variant_id") @db.Uuid
   catalogueProductId        String?                  @map("catalogue_product_id") @db.Uuid
   catalogueVariantId        String?                  @map("catalogue_variant_id") @db.Uuid
+  catalogueImageId          String?                  @map("catalogue_image_id") @db.Uuid
   emplacement_id            String                   @map("location_id") @db.Uuid
   type_article              TypeArticleStock?        @map("item_type")
   conception_verre          ConceptionVerreStock?    @map("lens_design")
@@ -696,6 +712,7 @@ model Stock {
   puissance_droite          Decimal?                 @map("right_power") @db.Decimal(5, 2)
   puissance_gauche          Decimal?                 @map("left_power") @db.Decimal(5, 2)
   marque_reference          String?                  @map("brand_reference") @db.VarChar(160)
+  frameImageUploadId        String?                  @map("frame_image_upload_id") @db.Uuid
   age_monture               AgeMontureStock?         @map("frame_age_group")
   public_cible              PublicCible?             @map("target_audience")
   taille_monture            String?                  @map("frame_size") @db.VarChar(60)
@@ -707,6 +724,8 @@ model Stock {
   variante_annonce          VarianteAnnonceMagasin?  @relation(fields: [storeListingVariantId], references: [id], onDelete: Cascade)
   catalogueProduct          CatalogueProduct?        @relation(fields: [catalogueProductId], references: [id], onDelete: SetNull)
   catalogueVariant          CatalogueProductVariant? @relation(fields: [catalogueVariantId], references: [id], onDelete: SetNull)
+  catalogueImage            CatalogueProductImage?   @relation(fields: [catalogueImageId], references: [id], onDelete: SetNull)
+  frameImageUpload          FrameImageUpload?        @relation(fields: [frameImageUploadId], references: [id], onDelete: SetNull)
   location                  EmplacementMagasin       @relation(fields: [emplacement_id], references: [id], onDelete: Restrict)
   mouvements                MouvementStock[]
 
@@ -714,6 +733,7 @@ model Stock {
   @@index([emplacement_id, type_article])
   @@index([catalogueProductId])
   @@index([catalogueVariantId])
+  @@index([catalogueImageId])
   @@map("stocks")
 }
 
@@ -1416,8 +1436,43 @@ model CatalogueProductImage {
   product            CatalogueProduct         @relation(fields: [catalogueProductId], references: [id], onDelete: Cascade)
   variant            CatalogueProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   verifiedBy         Utilisateur?             @relation("CatalogueImageVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  frameImageUpload   FrameImageUpload?
+  stockRecords       Stock[]
 
   @@index([catalogueProductId, isVerified, isPrimary])
   @@index([variantId, isVerified])
   @@map("catalogue_product_images")
+}
+
+model FrameImageUpload {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  storeId             String                 @map("store_id") @db.Uuid
+  uploaderId          String                 @map("uploader_id") @db.Uuid
+  brand               String                 @db.VarChar(120)
+  normalizedBrand     String                 @map("normalized_brand") @db.VarChar(120)
+  reference           String                 @db.VarChar(160)
+  normalizedReference String                 @map("normalized_reference") @db.VarChar(160)
+  model               String?                @db.VarChar(160)
+  color               String?                @db.VarChar(100)
+  ean                 String?                @db.VarChar(14)
+  visibility          FrameImageVisibility
+  reviewStatus        FrameImageReviewStatus @map("review_status")
+  imageUrl            String                 @map("image_url") @db.VarChar(2048)
+  storageKey          String                 @map("storage_key") @db.VarChar(1024)
+  reviewedById        String?                @map("reviewed_by_id") @db.Uuid
+  reviewedAt          DateTime?              @map("reviewed_at") @db.Timestamptz(6)
+  rejectionReason     String?                @map("rejection_reason") @db.VarChar(500)
+  publicConsentAt     DateTime?              @map("public_consent_at") @db.Timestamptz(6)
+  catalogueImageId    String?                @unique @map("catalogue_image_id") @db.Uuid
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  store               Magasin                @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  uploader            Utilisateur            @relation("FrameImageUploader", fields: [uploaderId], references: [id], onDelete: Restrict)
+  reviewer            Utilisateur?           @relation("FrameImageReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  catalogueImage      CatalogueProductImage? @relation(fields: [catalogueImageId], references: [id], onDelete: SetNull)
+  stocks              Stock[]
+
+  @@index([storeId, normalizedBrand, normalizedReference, visibility])
+  @@index([visibility, reviewStatus, normalizedBrand, normalizedReference])
+  @@map("frame_image_uploads")
 }

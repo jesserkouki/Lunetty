@@ -1,4 +1,4 @@
-import { apiRequest, queryString } from "./api";
+import { apiRequest, apiRequestBlob, queryString } from "./api";
 
 export type CatalogueProductType =
   | "MONTURE"
@@ -18,6 +18,7 @@ export type CatalogueImage = {
   isVerified: boolean;
   isPrimary: boolean;
   verifiedById: string | null;
+  verifiedBy: { prenom: string; nom: string } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -67,6 +68,35 @@ export type CatalogueSummary = {
   archivedProducts: number;
 };
 
+export type CatalogueImageContribution = {
+  id: string;
+  brand: string;
+  reference: string;
+  model: string | null;
+  color: string | null;
+  ean: string | null;
+  visibility: "PUBLIC";
+  reviewStatus: "NOT_REQUIRED" | "PENDING" | "APPROVED" | "REJECTED";
+  imageUrl: string;
+  createdAt: string;
+  publicConsentAt: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  store: { nom: string; slug: string };
+  uploader: { prenom: string; nom: string };
+  reviewer: { prenom: string; nom: string } | null;
+};
+
+export type CatalogueImageContributionPage = {
+  data: CatalogueImageContribution[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 export type CatalogueProductDraft = {
   brand: string;
   reference: string;
@@ -94,6 +124,28 @@ const root = "admin/catalogue";
 
 export const catalogueAdminService = {
   summary: () => apiRequest<CatalogueSummary>(`${root}/summary`),
+  imageContributions: (
+    page = 1,
+    limit = 20,
+    reviewStatus?: "PENDING" | "APPROVED" | "REJECTED",
+  ) =>
+    apiRequest<CatalogueImageContributionPage>(
+      `${root}/image-contributions${queryString({ page, limit, reviewStatus })}`,
+    ),
+  imageContributionPreview: (id: string) =>
+    apiRequestBlob(
+      `${root}/image-contributions/${encodeURIComponent(id)}/image`,
+    ),
+  verifyImageContribution: (id: string) =>
+    apiRequest<{ success: boolean; catalogueImageId: string }>(
+      `${root}/image-contributions/${encodeURIComponent(id)}/verify`,
+      { method: "POST" },
+    ),
+  rejectImageContribution: (id: string, reason: string) =>
+    apiRequest<{ success: boolean }>(
+      `${root}/image-contributions/${encodeURIComponent(id)}/reject`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
   products: (filters: {
     q?: string;
     page?: number;

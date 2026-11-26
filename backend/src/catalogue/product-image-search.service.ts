@@ -5,6 +5,7 @@ import { StoreAuthorizationService } from '../common/guards/store-authorization.
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeCatalogueValue } from './catalogue-normalization';
 import { ProductImageSuggestionsDto } from './dto/product-image-suggestions.dto';
+import { FrameImageUploadService } from './frame-image-upload.service';
 
 type MatchType =
   | 'EXACT_BRAND_REFERENCE_COLOR'
@@ -48,6 +49,7 @@ export class ProductImageSearchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storeAuthorization: StoreAuthorizationService,
+    private readonly frameImages: FrameImageUploadService,
   ) {}
 
   async suggestions(userId: string, query: ProductImageSuggestionsDto) {
@@ -68,6 +70,14 @@ export class ProductImageSearchService {
     const normalizedBrand = normalizeCatalogueValue(brand);
     const normalizedReference = normalizeCatalogueValue(reference);
     const normalizedColor = normalizeCatalogueValue(query.color ?? '');
+    const privateImages = await this.frameImages.privateSuggestions(
+      userId,
+      query.storeId,
+      brand,
+      reference,
+      query.color,
+      query.ean,
+    );
 
     if (brand && reference) {
       const exactProducts = await this.prisma.catalogueProduct.findMany({
@@ -96,7 +106,7 @@ export class ProductImageSearchService {
             'EXACT_BRAND_REFERENCE_COLOR',
           );
           if (suggestion.images.length) {
-            return this.resultPage([suggestion], query);
+            return this.resultPage([suggestion], query, privateImages);
           }
         }
       }
@@ -132,7 +142,7 @@ export class ProductImageSearchService {
           'EXACT_EAN',
         );
         if (suggestion.images.length) {
-          return this.resultPage([suggestion], query);
+          return this.resultPage([suggestion], query, privateImages);
         }
       }
     }
@@ -160,7 +170,7 @@ export class ProductImageSearchService {
           'EXACT_BRAND_REFERENCE',
         );
         if (suggestion.images.length) {
-          return this.resultPage([suggestion], query);
+          return this.resultPage([suggestion], query, privateImages);
         }
       }
 
@@ -186,7 +196,7 @@ export class ProductImageSearchService {
           'NORMALIZED_BRAND_REFERENCE',
         );
         if (suggestion.images.length) {
-          return this.resultPage([suggestion], query);
+          return this.resultPage([suggestion], query, privateImages);
         }
       }
     }
@@ -198,7 +208,7 @@ export class ProductImageSearchService {
       reference,
       query.model?.trim() ?? '',
     );
-    return this.resultPage(approximate, query);
+    return this.resultPage(approximate, query, privateImages);
   }
 
   private async findApproximate(
@@ -348,13 +358,20 @@ export class ProductImageSearchService {
     };
   }
 
-  private resultPage<T>(data: T[], query: ProductImageSuggestionsDto) {
-    return paginated(
-      data.slice(query.skip, query.skip + query.limit),
-      data.length,
-      query.page,
-      query.limit,
-    );
+  private resultPage<T>(
+    data: T[],
+    query: ProductImageSuggestionsDto,
+    privateImages: unknown[] = [],
+  ) {
+    return {
+      ...paginated(
+        data.slice(query.skip, query.skip + query.limit),
+        data.length,
+        query.page,
+        query.limit,
+      ),
+      privateImages,
+    };
   }
 }
 

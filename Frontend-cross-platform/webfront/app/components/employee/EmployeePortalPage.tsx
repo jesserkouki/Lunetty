@@ -246,9 +246,33 @@ export function EmployeePortalPage({ section }: { section: string }) {
                   });
                   setRefreshIndex((value) => value + 1);
                 }}
+                onUpdateStock={async (stockId, input) => {
+                  await inventoryService.update(
+                    selectedStoreId ?? "",
+                    stockId,
+                    input,
+                  );
+                  setRefreshIndex((value) => value + 1);
+                }}
                 onCreateStock={async (input) => {
                   await inventoryService.create(selectedStoreId ?? "", input);
                   setRefreshIndex((value) => value + 1);
+                }}
+                onUploadFrameImage={(image, input) =>
+                  inventoryService.uploadFrameImage(
+                    selectedStoreId ?? "",
+                    image,
+                    input,
+                  )
+                }
+                onReadFrameImage={(imageId) =>
+                  inventoryService.readFrameImage(selectedStoreId ?? "", imageId)
+                }
+                onDeleteFrameImage={async (imageId) => {
+                  await inventoryService.deleteFrameImage(
+                    selectedStoreId ?? "",
+                    imageId,
+                  );
                 }}
                 onSearchCatalogue={(search) =>
                   catalogueService.imageSuggestions(selectedStoreId ?? "", search)

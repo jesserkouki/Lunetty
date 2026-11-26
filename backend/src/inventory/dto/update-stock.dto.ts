@@ -16,4 +16,14 @@ export class UpdateStockDto {
   @IsOptional()
   @IsUUID()
   catalogueVariantId?: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  catalogueImageId?: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  frameImageUploadId?: string | null;
 }

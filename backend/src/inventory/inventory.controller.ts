@@ -2,17 +2,21 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
   UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBody,
   ApiBearerAuth,
@@ -24,6 +28,11 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../auth/auth.types';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CreateFrameImageUploadDto } from '../catalogue/dto/create-frame-image-upload.dto';
+import {
+  FrameImageFile,
+  FrameImageUploadService,
+} from '../catalogue/frame-image-upload.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateStockDto } from './dto/create-stock.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
@@ -43,6 +52,7 @@ export class InventoryController {
   constructor(
     private readonly inventory: InventoryService,
     private readonly referenceScan: ReferenceScanService,
+    private readonly frameImages: FrameImageUploadService,
   ) {}
 
   @Get()
@@ -114,6 +124,78 @@ export class InventoryController {
       throw new BadRequestException('Aucune photo reçue.');
     }
     return this.referenceScan.scan(file, { userId: user.id, storeId });
+  }
+
+  @Post('frame-images')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @UseInterceptors(
+    FileInterceptor('image', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: (_request, file, callback) => {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+          callback(
+            new BadRequestException('Use a JPEG, PNG, or WebP image.'),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        image: { type: 'string', format: 'binary' },
+        brand: { type: 'string' },
+        reference: { type: 'string' },
+        model: { type: 'string' },
+        color: { type: 'string' },
+        ean: { type: 'string' },
+        visibility: { type: 'string', enum: ['PRIVATE', 'PUBLIC'] },
+        confirmPublicSharing: { type: 'boolean' },
+      },
+      required: ['image', 'brand', 'reference', 'visibility'],
+    },
+  })
+  @ApiOperation({
+    summary: 'Upload a store-owned frame image for inventory',
+  })
+  uploadFrameImage(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('storeId', ParseUUIDPipe) storeId: string,
+    @Body() input: CreateFrameImageUploadDto,
+    @UploadedFile() file: FrameImageFile | undefined,
+  ) {
+    if (!file) throw new BadRequestException('Select an image to upload.');
+    return this.frameImages.upload(user.id, storeId, input, file);
+  }
+
+  @Get('frame-images/:imageId/image')
+  @Header('Content-Type', 'image/webp')
+  @Header('Cache-Control', 'private, no-store')
+  async readFrameImage(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('storeId', ParseUUIDPipe) storeId: string,
+    @Param('imageId', ParseUUIDPipe) imageId: string,
+  ) {
+    return new StreamableFile(
+      await this.frameImages.readStoreImage(user.id, storeId, imageId),
+    );
+  }
+
+  @Delete('frame-images/:imageId')
+  @ApiOperation({
+    summary: 'Delete an unlinked, unapproved uploaded frame image',
+  })
+  deleteFrameImage(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('storeId', ParseUUIDPipe) storeId: string,
+    @Param('imageId', ParseUUIDPipe) imageId: string,
+  ) {
+    return this.frameImages.deleteUnlinkedUpload(user.id, storeId, imageId);
   }
 
   @Get(':stockId')
