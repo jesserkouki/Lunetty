@@ -27,6 +27,7 @@ const imageSelect = {
   isVerified: true,
   isPrimary: true,
   verifiedById: true,
+  verifiedBy: { select: { prenom: true, nom: true } },
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.CatalogueProductImageSelect;

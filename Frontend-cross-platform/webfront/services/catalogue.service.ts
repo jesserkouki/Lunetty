@@ -40,6 +40,50 @@ export interface CatalogueImageSearch {
   ean?: string;
 }
 
+export interface PrivateFrameImageSuggestion {
+  id: string;
+  brand: string;
+  reference: string;
+  model: string | null;
+  color: string | null;
+  ean: string | null;
+  visibility: "PRIVATE";
+  reviewStatus: "NOT_REQUIRED";
+  imageUrl: string;
+  createdAt: string;
+  matchType: "EXACT_BRAND_REFERENCE";
+  isVerified: false;
+  isPrivate: true;
+}
+
+export interface CatalogueImageSuggestionsResponse {
+  data: CatalogueImageSuggestion[];
+  privateImages: PrivateFrameImageSuggestion[];
+}
+
+export interface FrameImageUploadInput {
+  brand: string;
+  reference: string;
+  model?: string;
+  color?: string;
+  ean?: string;
+  visibility: "PRIVATE" | "PUBLIC";
+  confirmPublicSharing?: boolean;
+}
+
+export interface FrameImageUploadResult {
+  id: string;
+  brand: string;
+  reference: string;
+  model: string | null;
+  color: string | null;
+  ean: string | null;
+  visibility: "PRIVATE" | "PUBLIC";
+  reviewStatus: "NOT_REQUIRED" | "PENDING" | "APPROVED" | "REJECTED";
+  imageUrl: string;
+  createdAt: string;
+}
+
 export interface ExternalImageSuggestion {
   id: string;
   provider: string;
@@ -76,7 +120,7 @@ export const catalogueService = {
   imageSuggestions: (
     storeId: string,
     search: CatalogueImageSearch,
-  ): Promise<{ data: CatalogueImageSuggestion[] }> =>
+  ): Promise<CatalogueImageSuggestionsResponse> =>
     apiRequest(
       `products/image-suggestions${queryString({
         storeId,

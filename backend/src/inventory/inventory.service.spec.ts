@@ -291,9 +291,81 @@ describe('InventoryService', () => {
         data: expect.objectContaining({
           catalogueProductId: 'catalogue-p1',
           catalogueVariantId: 'catalogue-v1',
+          catalogueImageId: 'catalogue-image-1',
         }),
       }),
     );
+  });
+
+  it('replaces a frame image only with an upload owned by the same shop', async () => {
+    const current = {
+      id: 'stock-id',
+      type_article: TypeArticleStock.MONTURE,
+      seuil_reapprovisionnement: 3,
+      catalogueProductId: null,
+      catalogueVariantId: null,
+      catalogueImageId: null,
+      frameImageUploadId: 'old-image',
+    };
+    const tx = {
+      stock: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const prisma = {
+      stock: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce(current)
+          .mockResolvedValueOnce({
+            ...current,
+            frameImageUploadId: 'new-image',
+          }),
+      },
+      frameImageUpload: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'new-image' }),
+      },
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const service = new InventoryService(
+      prisma as unknown as PrismaService,
+      authorization as unknown as StoreAuthorizationService,
+      audit as never,
+    );
+
+    await service.update('owner-id', 'shop-a', 'stock-id', {
+      seuil_reapprovisionnement: 3,
+      frameImageUploadId: 'new-image',
+      catalogueImageId: null,
+    });
+
+    expect(prisma.frameImageUpload.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'new-image',
+          storeId: 'shop-a',
+        }),
+      }),
+    );
+    expect(tx.stock.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          frameImageUploadId: 'new-image',
+          catalogueImageId: null,
+        }),
+      }),
+    );
+
+    prisma.stock.findFirst.mockResolvedValueOnce(current);
+    prisma.frameImageUpload.findFirst.mockResolvedValue(null);
+    await expect(
+      service.update('owner-id', 'shop-b', 'stock-id', {
+        seuil_reapprovisionnement: 3,
+        frameImageUploadId: 'new-image',
+        catalogueImageId: null,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.stock.updateMany).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a catalogue variant belonging to another product', async () => {
@@ -336,6 +408,68 @@ describe('InventoryService', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('persists only an uploaded image owned by the stock shop', async () => {
+    const tx = {
+      stock: {
+        create: jest.fn().mockResolvedValue({
+          id: 'stock-id',
+          frameImageUploadId: 'frame-image-id',
+        }),
+      },
+      mouvementStock: { create: jest.fn() },
+    };
+    const prisma = {
+      emplacementMagasin: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'location-id' }),
+      },
+      varianteAnnonceMagasin: { findFirst: jest.fn() },
+      frameImageUpload: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'frame-image-id' }),
+      },
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const service = new InventoryService(
+      prisma as unknown as PrismaService,
+      authorization as unknown as StoreAuthorizationService,
+      audit as never,
+    );
+    const input = {
+      emplacement_id: 'location-id',
+      type_article: TypeArticleStock.MONTURE,
+      marque_reference: 'Ray-Ban RB5228',
+      public_cible: PublicCible.MIXTE,
+      age_monture: AgeMontureStock.ADULTE,
+      taille_monture: '52-18',
+      frameImageUploadId: 'frame-image-id',
+    };
+
+    await service.create('owner-id', 'store-1', input);
+
+    expect(prisma.frameImageUpload.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'frame-image-id',
+          storeId: 'store-1',
+        }),
+      }),
+    );
+    expect(tx.stock.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          frameImageUploadId: 'frame-image-id',
+        }),
+      }),
+    );
+
+    prisma.frameImageUpload.findFirst.mockResolvedValue(null);
+    await expect(
+      service.create('owner-id', 'store-2', input),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it('allows two shops to reference the same catalogue variant independently', async () => {

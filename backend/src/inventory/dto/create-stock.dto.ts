@@ -45,6 +45,14 @@ export class CreateStockDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
+    description: 'Uploaded frame image owned by this store',
+  })
+  @IsOptional()
+  @IsUUID()
+  frameImageUploadId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
     description: 'Idempotency key reused for retries of this stock creation',
   })
   @IsOptional()

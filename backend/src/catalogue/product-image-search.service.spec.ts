@@ -32,6 +32,9 @@ describe('ProductImageSearchService', () => {
   const storeAuthorization = {
     requirePermission: jest.fn(),
   };
+  const frameImages = {
+    privateSuggestions: jest.fn().mockResolvedValue([]),
+  };
   let service: ProductImageSearchService;
 
   beforeEach(() => {
@@ -43,6 +46,7 @@ describe('ProductImageSearchService', () => {
     service = new ProductImageSearchService(
       prismaMock as unknown as PrismaService,
       storeAuthorization as unknown as StoreAuthorizationService,
+      frameImages as never,
     );
   });
 
@@ -259,5 +263,45 @@ describe('ProductImageSearchService', () => {
     });
 
     expect(result.data).toEqual([]);
+  });
+
+  it('returns a separate shop-private upload without marking it verified', async () => {
+    prismaMock.catalogueProduct.findMany.mockResolvedValue([]);
+    prismaMock.catalogueProduct.findFirst.mockResolvedValue(null);
+    frameImages.privateSuggestions.mockResolvedValue([
+      {
+        id: 'private-frame-image',
+        visibility: 'PRIVATE',
+        reviewStatus: 'NOT_REQUIRED',
+        isVerified: false,
+        isPrivate: true,
+      },
+    ]);
+
+    const result = await service.suggestions('staff-1', {
+      storeId: 'store-1',
+      brand: 'Ray-Ban',
+      reference: 'RB2140',
+      page: 1,
+      limit: 20,
+      skip: 0,
+    });
+
+    expect(result.data).toEqual([]);
+    expect(result.privateImages).toEqual([
+      expect.objectContaining({
+        id: 'private-frame-image',
+        isVerified: false,
+        isPrivate: true,
+      }),
+    ]);
+    expect(frameImages.privateSuggestions).toHaveBeenCalledWith(
+      'staff-1',
+      'store-1',
+      'Ray-Ban',
+      'RB2140',
+      undefined,
+      undefined,
+    );
   });
 });

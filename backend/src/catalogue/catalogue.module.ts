@@ -7,9 +7,11 @@ import { BraveImageProvider } from './brave-image.provider';
 import { OpenverseImageProvider } from './openverse-image.provider';
 import { ProductImageSearchService } from './product-image-search.service';
 import { SerpApiImageProvider } from './serpapi-image.provider';
+import { FrameImageUploadService } from './frame-image-upload.service';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, AuditModule],
   controllers: [CatalogueAdminController],
   providers: [
     CatalogueService,
@@ -18,11 +20,13 @@ import { SerpApiImageProvider } from './serpapi-image.provider';
     OpenverseImageProvider,
     SerpApiImageProvider,
     ExternalImageSearchService,
+    FrameImageUploadService,
   ],
   exports: [
     CatalogueService,
     ProductImageSearchService,
     ExternalImageSearchService,
+    FrameImageUploadService,
   ],
 })
 export class CatalogueModule {}

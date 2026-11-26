@@ -3,11 +3,13 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -23,6 +25,9 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PlatformRoles } from '../common/decorators/platform-roles.decorator';
 import { PlatformRolesGuard } from '../common/guards/platform-roles.guard';
 import { CatalogueService } from './catalogue.service';
+import { FrameImageUploadService } from './frame-image-upload.service';
+import { QueryFrameImageContributionsDto } from './dto/query-frame-image-contributions.dto';
+import { RejectFrameImageContributionDto } from './dto/reject-frame-image-contribution.dto';
 import { CreateCatalogueImageDto } from './dto/create-catalogue-image.dto';
 import { CreateCatalogueProductDto } from './dto/create-catalogue-product.dto';
 import { CreateCatalogueVariantDto } from './dto/create-catalogue-variant.dto';
@@ -37,12 +42,50 @@ import { UpdateCatalogueVariantDto } from './dto/update-catalogue-variant.dto';
 @ApiBearerAuth()
 @ApiTags('Catalogue administration')
 export class CatalogueAdminController {
-  constructor(private readonly catalogue: CatalogueService) {}
+  constructor(
+    private readonly catalogue: CatalogueService,
+    private readonly frameImages: FrameImageUploadService,
+  ) {}
 
   @Get('summary')
   @ApiOperation({ summary: 'Get shared catalogue totals' })
   getSummary() {
     return this.catalogue.getSummary();
+  }
+
+  @Get('image-contributions')
+  @ApiOperation({ summary: 'List public frame images awaiting review' })
+  listImageContributions(@Query() query: QueryFrameImageContributionsDto) {
+    return this.frameImages.listPublicContributions(query, query.reviewStatus);
+  }
+
+  @Get('image-contributions/:id/image')
+  @Header('Content-Type', 'image/webp')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Preview an unverified public frame image' })
+  async previewImageContribution(@Param('id', ParseUUIDPipe) id: string) {
+    return new StreamableFile(await this.frameImages.readAdminImage(id));
+  }
+
+  @Post('image-contributions/:id/verify')
+  @ApiOperation({
+    summary: 'Verify and add a public frame image to shared catalogue search',
+  })
+  verifyImageContribution(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.frameImages.approvePublicUpload(id, user.id);
+  }
+
+  @Post('image-contributions/:id/reject')
+  @ApiOperation({ summary: 'Reject a public frame image contribution' })
+  rejectImageContribution(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: RejectFrameImageContributionDto,
+  ) {
+    return this.frameImages.rejectPublicUpload(id, user.id, input.reason);
   }
 
   @Post('products')
