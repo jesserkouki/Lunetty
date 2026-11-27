@@ -185,7 +185,9 @@ export default function AccountSettingsPage() {
 
   useEffect(() => {
     if (status === "guest") router.replace("/");
-    if (status === "authenticated") void loadSettings();
+    if (status !== "authenticated") return;
+    const frame = window.requestAnimationFrame(() => void loadSettings());
+    return () => window.cancelAnimationFrame(frame);
   }, [status, router, loadSettings]);
 
   useEffect(() => {
@@ -199,10 +201,6 @@ export default function AccountSettingsPage() {
   }, [dirty]);
 
   useEffect(() => {
-    if (!prescriptions.length) {
-      setFileUrls({});
-      return;
-    }
     let active = true;
     const objectUrls: string[] = [];
     Promise.all(

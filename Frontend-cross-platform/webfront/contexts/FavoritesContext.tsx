@@ -32,7 +32,10 @@ type FavoritesContextValue = {
   pendingProductIds: ReadonlySet<string>;
   error: string | null;
   isFavorite: (productId: string) => boolean;
-  toggleFavorite: (productId: string) => Promise<void>;
+  toggleFavorite: (
+    productId: string,
+    product: CatalogProduct,
+  ) => Promise<void>;
   refresh: () => Promise<void>;
   clearError: () => void;
 };
@@ -54,9 +57,25 @@ async function getAllProductFavorites(): Promise<FavoriteProduct[]> {
   return favorites;
 }
 
-function readLocalFavoriteIds(): string[] {
+type LocalFavoriteState = {
+  ids: string[];
+  productsById: Map<string, CatalogProduct>;
+};
+
+function isCatalogProduct(value: unknown): value is CatalogProduct {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const product = value as Record<string, unknown>;
+  return (
+    typeof product.id === "string" &&
+    typeof product.nom === "string" &&
+    typeof product.slug === "string" &&
+    typeof product.type === "string"
+  );
+}
+
+function readLocalFavoriteState(): LocalFavoriteState {
   const stored = window.localStorage.getItem(LOCAL_FAVORITES_KEY);
-  if (!stored) return [];
+  if (!stored) return { ids: [], productsById: new Map() };
 
   let value: unknown;
   try {
@@ -68,23 +87,74 @@ function readLocalFavoriteIds(): string[] {
     throw new Error("La liste locale des favoris est invalide.");
   }
 
-  return [...new Set(value.filter(isFavoriteProductId))];
+  const productsById = new Map<string, CatalogProduct>();
+  const ids = value.flatMap((entry) => {
+    if (isFavoriteProductId(entry)) return [entry];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+
+    const favorite = entry as Record<string, unknown>;
+    if (!isFavoriteProductId(favorite.id)) return [];
+    if (
+      isCatalogProduct(favorite.produit) &&
+      favorite.produit.id === favorite.id
+    ) {
+      productsById.set(favorite.id, favorite.produit);
+    }
+    return [favorite.id];
+  });
+
+  return { ids: [...new Set(ids)], productsById };
+}
+
+function readLocalFavoriteIds(): string[] {
+  return readLocalFavoriteState().ids;
 }
 
 async function getLocalProductFavorites(
   ids = readLocalFavoriteIds(),
+  productsById = readLocalFavoriteState().productsById,
 ): Promise<FavoriteEntry[]> {
-  const products: CatalogProduct[] = [];
-  for (let index = 0; index < ids.length; index += 100) {
-    products.push(...(await productsService.byIds(ids.slice(index, index + 100))));
+  const missingIds = ids.filter((id) => !productsById.has(id));
+  for (let index = 0; index < missingIds.length; index += 100) {
+    const products = await productsService.byIds(
+      missingIds.slice(index, index + 100),
+    );
+    for (const product of products) productsById.set(product.id, product);
   }
 
-  const productsById = new Map(products.map((product) => [product.id, product]));
   const cree_le = new Date().toISOString();
   return ids.flatMap((id) => {
     const produit = productsById.get(id);
     return produit ? [{ id, cree_le, produit }] : [];
   });
+}
+
+async function updateLocalFavorite(
+  productId: string,
+  wasFavorite: boolean,
+  product: CatalogProduct,
+): Promise<FavoriteEntry[]> {
+  const { ids, productsById } = readLocalFavoriteState();
+  const nextIds = wasFavorite
+    ? ids.filter((id) => id !== productId)
+    : [...new Set([...ids, productId])];
+
+  if (wasFavorite) {
+    productsById.delete(productId);
+  } else {
+    productsById.set(productId, product);
+  }
+
+  window.localStorage.setItem(
+    LOCAL_FAVORITES_KEY,
+    JSON.stringify(
+      nextIds.map((id) => {
+        const savedProduct = productsById.get(id);
+        return savedProduct ? { id, produit: savedProduct } : id;
+      }),
+    ),
+  );
+  return getLocalProductFavorites(nextIds, productsById);
 }
 
 async function getAccountProductFavorites(): Promise<FavoriteProduct[]> {
@@ -221,7 +291,7 @@ export function FavoritesProvider({
   );
 
   const toggleFavorite = useCallback(
-    async (productId: string) => {
+    async (productId: string, product: CatalogProduct) => {
       if (!isFavoriteProductId(productId)) {
         setError("Un identifiant de produit valide est requis.");
         return;
@@ -233,15 +303,11 @@ export function FavoritesProvider({
 
       try {
         if (!isAuthenticatedUser || localFallback) {
-          const ids = readLocalFavoriteIds();
-          const nextIds = wasFavorite
-            ? ids.filter((id) => id !== productId)
-            : [...new Set([...ids, productId])];
-          window.localStorage.setItem(
-            LOCAL_FAVORITES_KEY,
-            JSON.stringify(nextIds),
+          const localProducts = await updateLocalFavorite(
+            productId,
+            wasFavorite,
+            product,
           );
-          const localProducts = await getLocalProductFavorites(nextIds);
           setLocalFavorites(localProducts);
           setLocalFavoritesLoaded(true);
           setLocalFallback(true);
@@ -258,15 +324,9 @@ export function FavoritesProvider({
         if (isUnauthorized(toggleError)) {
           setLocalFallback(true);
           try {
-            const ids = readLocalFavoriteIds();
-            const nextIds = wasFavorite
-              ? ids.filter((id) => id !== productId)
-              : [...new Set([...ids, productId])];
-            window.localStorage.setItem(
-              LOCAL_FAVORITES_KEY,
-              JSON.stringify(nextIds),
+            setLocalFavorites(
+              await updateLocalFavorite(productId, wasFavorite, product),
             );
-            setLocalFavorites(await getLocalProductFavorites(nextIds));
             setLocalFavoritesLoaded(true);
             setError(null);
           } catch (localError) {

@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -19,8 +19,9 @@ import {
   Phone,
   Wrench,
 } from "lucide-react";
-import { DEMO_STORES, type Frame } from "../../data/marketplace-demo";
+import { DEMO_STORES } from "../../data/marketplace-demo";
 import { getShopDemoDetails } from "../../data/shops-demo";
+import type { Frame, OpticianStore } from "../../lib/marketplace-types";
 import { findStore } from "../../lib/marketplace";
 import { useAuth } from "../../../lib/auth-context";
 import { isOpenDay, parseSchedule } from "./OpenStatusBadge";
@@ -64,7 +65,7 @@ function ShopHero({
   onFavorite,
   onBooking,
 }: {
-  store: (typeof DEMO_STORES)[number];
+  store: OpticianStore;
   favorite: boolean;
   onFavorite: () => void;
   onBooking: () => void;
@@ -135,7 +136,7 @@ function ShopTabs({ activeId }: { activeId: string }) {
     ["infos", "Infos pratiques"],
   ];
   return (
-    <nav aria-label="Sections de la boutique" className="sticky top-[68px] z-30 mt-5 border-y border-lunetty-line bg-lunetty-cream/95 px-5 backdrop-blur-xl sm:px-8 lg:px-12">
+    <nav aria-label="Sections de la boutique" className="mt-5 border-y border-lunetty-line bg-lunetty-cream px-5 sm:px-8 lg:px-12">
       <div className="mx-auto flex max-w-[1600px] gap-2 overflow-x-auto">
         {tabs.map(([id, label]) => (
           <a key={id} href={`#${id}`} aria-current={activeId === id ? "location" : undefined} className={`flex min-h-12 shrink-0 items-center border-b-2 px-3 text-sm font-semibold transition ${activeId === id ? "border-lunetty-gold-dark text-lunetty-ink dark:text-white" : "border-transparent text-lunetty-muted hover:text-lunetty-ink"}`}>
@@ -151,7 +152,7 @@ function ShopStats({
   store,
   foundedYear,
 }: {
-  store: (typeof DEMO_STORES)[number];
+  store: OpticianStore;
   foundedYear: number;
 }) {
   const stats = [
@@ -198,7 +199,7 @@ function ShopInfo({
   extras,
   today,
 }: {
-  store: (typeof DEMO_STORES)[number];
+  store: OpticianStore;
   extras: ReturnType<typeof getShopDemoDetails>;
   today: number | null;
 }) {
@@ -350,10 +351,10 @@ export default function OpticianShowcasePage() {
     }
     return (
       <main id="contenu" className="grid min-h-screen place-items-center bg-lunetty-cream px-5 pt-24 text-lunetty-ink">
-        <div className="max-w-xl py-20 text-center">
+        <div className="mx-auto max-w-3xl py-20 text-center">
           <Glasses aria-hidden="true" className="mx-auto h-12 w-12 text-lunetty-gold-dark" />
           <h1 className="mt-5 font-serif text-4xl font-semibold">Boutique introuvable</h1>
-          <p className="mt-4 text-sm text-lunetty-muted">Cette vitrine n’est pas disponible pour le moment.</p>
+          <p className="mt-4 text-sm text-lunetty-muted">{error ?? "Cette vitrine n’est pas disponible pour le moment."}</p>
           <Link className="mt-7 inline-flex min-h-12 items-center rounded-full bg-lunetty-ink px-5 text-sm font-semibold text-white dark:bg-lunetty-gold dark:text-lunetty-ink" href="/opticiens">Voir les opticiens</Link>
         </div>
       </main>
@@ -365,12 +366,12 @@ export default function OpticianShowcasePage() {
   };
 
   return (
-    <main id="contenu" className="min-h-screen bg-lunetty-cream pb-24 text-lunetty-ink sm:pb-20">
+    <main id="contenu" className="min-h-screen bg-lunetty-cream pb-12 text-lunetty-ink sm:pb-20">
       <ShopHero store={store} favorite={favorite} onFavorite={toggleFavorite} onBooking={openBooking} />
       <ShopTabs activeId={activeSection} />
       <ShopStats store={store} foundedYear={extras.foundedYear} />
 
-      <section id="montures" className="scroll-mt-32 px-4 py-14 sm:px-8 sm:py-20 lg:px-12">
+      <section id="montures" className="scroll-mt-20 px-4 py-14 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[1600px]">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <ShopSectionTitle eyebrow="Choisies par la maison" title="Coups de cœur de l’opticien" description="Quelques montures qui reflètent l’esprit de cette boutique." />
@@ -401,12 +402,13 @@ export default function OpticianShowcasePage() {
               reload={reload}
               showIntro={false}
               showDemoNotice={false}
+              stickyFilters={false}
             />
           </div>
         </div>
       </section>
 
-      <section id="apropos" className="scroll-mt-32 bg-lunetty-surface px-4 py-14 sm:px-8 sm:py-20 lg:px-12">
+      <section id="apropos" className="scroll-mt-20 bg-lunetty-surface px-4 py-14 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto grid max-w-[1600px] gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(380px,.9fr)] lg:items-center">
           <div>
             <ShopSectionTitle eyebrow="Une maison de proximité" title="À propos de la boutique" />
@@ -425,21 +427,21 @@ export default function OpticianShowcasePage() {
         </div>
       </section>
 
-      <section id="services" className="scroll-mt-32 px-4 py-14 sm:px-8 sm:py-20 lg:px-12">
+      <section id="services" className="scroll-mt-20 px-4 py-14 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[1600px]">
           <ShopSectionTitle eyebrow="À votre écoute" title="Services en boutique" description="Un accompagnement attentif, du choix de votre monture à son ajustage." />
           <ShopServices services={extras.services} />
         </div>
       </section>
 
-      <section id="infos" className="scroll-mt-32 bg-lunetty-surface px-4 py-14 sm:px-8 sm:py-20 lg:px-12">
+      <section id="infos" className="scroll-mt-20 bg-lunetty-surface px-4 py-14 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[1600px]">
           <ShopSectionTitle eyebrow="Nous trouver" title="Infos pratiques" description="Préparez votre visite et prenez rendez-vous directement avec notre équipe." />
           <ShopInfo store={store} extras={extras} today={today} />
         </div>
       </section>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-[1fr_auto] gap-2 border-t border-lunetty-line bg-lunetty-cream/95 p-3 backdrop-blur-xl sm:hidden">
+      <div className="mt-8 grid grid-cols-[1fr_auto] gap-2 px-4 sm:hidden">
         <button type="button" onClick={openBooking} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-lunetty-ink px-3 text-sm font-bold text-white dark:bg-lunetty-gold dark:text-lunetty-ink">
           <CalendarDays aria-hidden="true" className="h-4 w-4" /> Réserver un essayage
         </button>

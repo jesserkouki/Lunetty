@@ -1,9 +1,9 @@
-import { apiRequest, JsonRecord, queryString } from "./api";
+import { ApiError, apiRequest, JsonRecord, queryString } from "./api";
 import type { Page } from "./users.service";
 
 export const storesService = {
-  list: (page = 1) =>
-    apiRequest<Page<JsonRecord>>(`stores${queryString({ page, limit: 20 })}`),
+  list: (page = 1, limit = 20) =>
+    apiRequest<Page<JsonRecord>>(`stores${queryString({ page, limit })}`),
   find: (id: string) => apiRequest<JsonRecord>(`stores/${id}`),
   manage: (id: string) => apiRequest<JsonRecord>(`stores/${id}/manage`),
   create: (input: JsonRecord) =>
@@ -57,6 +57,46 @@ export const storesService = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  createLocations: async (id: string, inputs: JsonRecord[]) => {
+    try {
+      return await apiRequest<JsonRecord[]>(`stores/${id}/locations/bulk`, {
+        method: "POST",
+        body: JSON.stringify({ locations: inputs }),
+      });
+    } catch (error) {
+      if (
+        !(error instanceof ApiError) ||
+        error.status !== 404 ||
+        !error.message.toLowerCase().includes("cannot post")
+      ) {
+        throw error;
+      }
+
+      const created: JsonRecord[] = [];
+      try {
+        for (const input of inputs) {
+          created.push(
+            await apiRequest<JsonRecord>(`stores/${id}/locations`, {
+              method: "POST",
+              body: JSON.stringify(input),
+            }),
+          );
+        }
+      } catch (fallbackError) {
+        if (created.length === 0) throw fallbackError;
+        const message =
+          fallbackError instanceof Error
+            ? fallbackError.message
+            : "La requête a échoué.";
+        throw new ApiError(
+          fallbackError instanceof ApiError ? fallbackError.status : 0,
+          `${created.length} emplacement(s) créé(s), puis erreur : ${message}`,
+          { createdCount: created.length },
+        );
+      }
+      return created;
+    }
+  },
   createLocationType: (id: string, input: JsonRecord) =>
     apiRequest<JsonRecord>(`stores/${id}/locations/types`, {
       method: "POST",
@@ -67,6 +107,11 @@ export const storesService = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
+  deleteLocation: (storeId: string, locationId: string) =>
+    apiRequest<{ success: boolean }>(
+      `stores/${storeId}/locations/${locationId}`,
+      { method: "DELETE" },
+    ),
   updateLocationType: (storeId: string, typeId: string, input: JsonRecord) =>
     apiRequest<JsonRecord>(`stores/${storeId}/locations/types/${typeId}`, {
       method: "PATCH",
@@ -74,6 +119,10 @@ export const storesService = {
     }),
   listings: (id: string, page = 1) =>
     apiRequest<Page<JsonRecord>>(`stores/${id}/listings${queryString({ page, limit: 20 })}`),
+  catalogue: (id: string, page = 1, limit = 20) =>
+    apiRequest<Page<JsonRecord>>(
+      `stores/${id}/catalogue${queryString({ page, limit })}`,
+    ),
   managedListings: (id: string, page = 1) =>
     apiRequest<Page<JsonRecord>>(
       `stores/${id}/manage/listings${queryString({ page, limit: 20 })}`,

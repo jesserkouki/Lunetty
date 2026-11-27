@@ -1,12 +1,10 @@
-import { DEMO_FRAMES, DEMO_OPTICIANS, DEMO_STORES, type Frame, type FrameColorOption, type Optician, type OpticianStore } from "../data/marketplace-demo";
-import { productsService } from "../../services/products.service";
+import type { Frame, FrameColorOption, Optician, OpticianStore } from "./marketplace-types";
 import { storesService } from "../../services/stores.service";
 import type { JsonRecord } from "../../services/api";
 
 type MarketplaceData = {
   frames: Frame[];
   stores: OpticianStore[];
-  isDemo: boolean;
   notice?: string;
   error?: string;
 };
@@ -151,69 +149,90 @@ function mapListing(
   };
 }
 
+function mapPublishedStock(stock: JsonRecord, store: OpticianStore): Frame | undefined {
+  if (stock.available !== true) return undefined;
+  const id = text(stock.id);
+  const brand = text(stock.brand, "Monture");
+  const reference = text(stock.reference);
+  const name = text(stock.name, [brand, reference].filter(Boolean).join(" "));
+  const color = text(stock.color, "Coloris à découvrir");
+  const price = number(stock.price);
+  if (!id || !name || price === undefined || price <= 0) return undefined;
+  const image = text(stock.imageUrl, "/images/frame-placeholder.svg");
+
+  return {
+    id,
+    productId: id,
+    slug: id,
+    name,
+    brand,
+    category: "Optique",
+    shape: "Monture",
+    style: "Contemporain",
+    color,
+    material: "Matière à découvrir",
+    faceShapes: [],
+    price,
+    currency: text(stock.currency, "TND"),
+    image,
+    imageAlt: `Monture ${name}`,
+    colorOptions: color === "Coloris à découvrir"
+      ? []
+      : [{ name: color, swatch: colorSwatch(color), image }],
+    modelUrl: undefined,
+    description: "Une monture disponible auprès de votre opticien.",
+    storeId: store.id,
+    storeSlug: store.slug,
+    storeName: store.name,
+    city: store.city,
+    publishedAt: text(stock.createdAt),
+    engagement: 0,
+    sponsored: false,
+    listingVariantId: id,
+  };
+}
+
 export async function loadMarketplaceData(): Promise<MarketplaceData> {
-  const [catalogResult, storesResult] = await Promise.allSettled([
-    productsService.list(1),
-    storesService.list(1),
-  ]);
-  const catalogProducts =
-    catalogResult.status === "fulfilled" ? records(catalogResult.value) : [];
-  const apiStores =
-    storesResult.status === "fulfilled" ? records(storesResult.value) : [];
-  const stores = apiStores.map(mapStore);
-
-  if (!stores.length) {
-    return {
-      frames: DEMO_FRAMES,
-      stores: DEMO_STORES,
-      isDemo: true,
-      notice: "Catalogue de démonstration : les boutiques ne sont pas disponibles depuis l’API pour le moment.",
-      error: storesResult.status === "rejected"
-        ? "Les boutiques n’ont pas pu être chargées. La sélection de démonstration reste disponible."
-        : undefined,
-    };
-  }
-
-  const catalog = new Map(
-    catalogProducts.map((product) => [text(product.id), product]),
-  );
-  const listingResults = await Promise.allSettled(
-    apiStores.slice(0, 12).map((store) =>
-      storesService.listings(text(store.id), 1),
+  const firstPage = await storesService.list(1, 100);
+  const firstPageData = records(firstPage);
+  const meta = firstPage.meta;
+  const totalPages = isRecord(meta)
+    ? Math.max(1, Math.floor(number(meta.totalPages) ?? 1))
+    : 1;
+  const otherStorePages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) =>
+      storesService.list(index + 2, 100),
     ),
   );
-  const frames = listingResults.flatMap((result, storeIndex) => {
+  const apiStores = [
+    ...firstPageData,
+    ...otherStorePages.flatMap(records),
+  ];
+  const stores = apiStores.map(mapStore);
+  const catalogueResults = await Promise.allSettled(
+    stores.map((store) => storesService.catalogue(store.id, 1, 100)),
+  );
+  const frames = catalogueResults.flatMap((result, storeIndex) => {
     if (result.status !== "fulfilled") return [];
     const store = stores[storeIndex];
     return records(result.value)
-      .map((listing) =>
-        mapListing(
-          listing,
-          store,
-          catalog,
-          "/images/frame-placeholder.svg",
-        ),
-      )
+      .map((stock) => mapPublishedStock(stock, store))
       .filter((frame): frame is Frame => Boolean(frame));
   });
-
-  if (frames.length) {
-    const failedListings = listingResults.some((result) => result.status === "rejected");
-    return {
-      frames,
-      stores,
-      isDemo: false,
-      notice: failedListings
-        ? "Certaines boutiques ne sont pas encore disponibles dans le catalogue."
-        : undefined,
-    };
-  }
+  const storesWithCounts = stores.map((store) => ({
+    ...store,
+    listingCount: frames.filter((frame) => frame.storeId === store.id).length,
+  }));
+  const failedStores = catalogueResults.filter(
+    (result) => result.status === "rejected",
+  ).length;
 
   return {
-    frames: DEMO_FRAMES,
-    stores,
-    isDemo: true,
-    notice: "Montures de démonstration affichées : aucune annonce publique tarifée n’est disponible pour le moment.",
+    frames,
+    stores: storesWithCounts,
+    notice: failedStores
+      ? `Les produits de ${failedStores} boutique${failedStores === 1 ? "" : "s"} n’ont pas pu être chargés.`
+      : undefined,
   };
 }
 
@@ -245,19 +264,10 @@ export function findStore(stores: OpticianStore[], id: string) {
 export function getOpticians(
   stores: OpticianStore[],
   frames: Frame[],
-  useDemoDetails = false,
 ): Optician[] {
   return stores.map((store) => {
-    const demo = useDemoDetails
-      ? DEMO_OPTICIANS.find((optician) => optician.id === store.id)
-      : undefined;
     return {
-      ...demo,
       ...store,
-      rating: store.rating ?? demo?.rating,
-      reviewCount: store.reviewCount ?? demo?.reviewCount,
-      inStoreTryOn: store.inStoreTryOn ?? demo?.inStoreTryOn,
-      isNew: store.isNew ?? demo?.isNew,
       montures: frames
         .filter((frame) => frame.storeId === store.id && frame.image !== "/images/frame-placeholder.svg")
         .filter((frame, index, matches) => matches.findIndex((match) => match.image === frame.image) === index)

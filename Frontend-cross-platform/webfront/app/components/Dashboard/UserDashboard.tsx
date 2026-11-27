@@ -88,6 +88,7 @@ export default function UserDashboard({ user, dark, onNavigate, onSettings }: Pr
   const [rescheduleTime, setRescheduleTime] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [now, setNow] = useState(0);
 
   const card = "rounded-[1.5rem] border border-lunetty-line bg-lunetty-surface p-5 shadow-[0_16px_44px_rgba(26,23,19,0.06)] sm:p-6";
   const inner = "rounded-2xl border border-lunetty-line bg-lunetty-cream p-4";
@@ -125,8 +126,19 @@ export default function UserDashboard({ user, dark, onNavigate, onSettings }: Pr
   }, []);
 
   useEffect(() => {
-    void loadDashboard();
+    const frame = window.requestAnimationFrame(() => void loadDashboard());
+    return () => window.cancelAnimationFrame(frame);
   }, [loadDashboard]);
+
+  useEffect(() => {
+    const update = () => setNow(Date.now());
+    const frame = window.requestAnimationFrame(update);
+    const timer = window.setInterval(update, 60_000);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -134,7 +146,6 @@ export default function UserDashboard({ user, dark, onNavigate, onSettings }: Pr
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const now = Date.now();
   const upcomingAppointments = useMemo(
     () => appointments
       .filter((appointment) => !isTerminal(appointment) && new Date(appointment.commence_le).getTime() >= now)
@@ -391,7 +402,7 @@ export default function UserDashboard({ user, dark, onNavigate, onSettings }: Pr
                 {visibleAppointments.map((appointment) => {
                   const storeAddress = appointment.magasin.adresses[0];
                   const destination = [storeAddress?.ligne_1, storeAddress?.ville].filter(Boolean).join(", ");
-                  const canManage = !isTerminal(appointment) && new Date(appointment.commence_le).getTime() >= Date.now();
+                  const canManage = !isTerminal(appointment) && new Date(appointment.commence_le).getTime() >= now;
                   return (
                     <article key={appointment.id} className="rounded-2xl border border-lunetty-line bg-lunetty-surface p-4 sm:p-5">
                       <div className="flex flex-wrap items-start gap-4">

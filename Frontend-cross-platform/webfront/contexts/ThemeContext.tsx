@@ -18,10 +18,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [systemDark, setSystemDark] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved === "dark" || saved === "light" || saved === "system") {
-      setThemeModeState(saved);
-    }
+    const frame = window.requestAnimationFrame(() => {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+      if (saved === "dark" || saved === "light" || saved === "system") {
+        setThemeModeState(saved);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {

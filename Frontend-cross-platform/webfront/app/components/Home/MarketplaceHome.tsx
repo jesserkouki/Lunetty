@@ -7,8 +7,7 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { DEMO_FRAMES, DEMO_STORES } from "../../data/marketplace-demo";
-import type { OpticianStore } from "../../data/marketplace-demo";
+import type { OpticianStore } from "../../lib/marketplace-types";
 import { useReducedMotion } from "../../../lib/motion/useReducedMotion";
 import { FrameCarousel, SectionHeading, StoreCarousel } from "../marketplace/MarketplaceUI";
 import OpticiansSection from "../marketplace/OpticiansSection";
@@ -73,7 +72,7 @@ function RevealSection({
 }
 
 export default function MarketplaceHome() {
-  const { frames, stores, isDemo, notice, loading, error } = useMarketplaceData();
+  const { frames, stores, notice, loading, error } = useMarketplaceData();
   const { status } = useAuth();
   const historySnapshot = useSyncExternalStore(
     subscribeToViewedFrames,
@@ -86,18 +85,14 @@ export default function MarketplaceHome() {
   useEffect(() => {
     const independent = stores.filter((store) => store.independent);
     const frame = window.requestAnimationFrame(() => {
-      setIndependentStores(shuffle(independent.length ? independent : DEMO_STORES));
+      setIndependentStores(shuffle(independent));
     });
     return () => window.cancelAnimationFrame(frame);
   }, [stores]);
 
-  const engagementFrames = useMemo(
-    () => frames.some((frame) => frame.engagement > 0) ? frames : DEMO_FRAMES,
-    [frames],
-  );
   const trending = useMemo(
-    () => [...engagementFrames].sort((a, b) => b.engagement - a.engagement),
-    [engagementFrames],
+    () => [...frames].sort((a, b) => b.engagement - a.engagement),
+    [frames],
   );
   const lastViewed = history.length ? frames.find((frame) => frame.id === history[0] || frame.productId === history[0]) : undefined;
   const recommended = status === "authenticated" && lastViewed
@@ -115,20 +110,19 @@ export default function MarketplaceHome() {
   );
   const hasSalesMetrics = frames.some((frame) => typeof frame.salesCount === "number");
   const bestSellers = useMemo(
-    () => [...(hasSalesMetrics ? frames : DEMO_FRAMES)].sort((a, b) => (b.salesCount ?? 0) - (a.salesCount ?? 0)),
+    () => frames
+      .filter((frame) => typeof frame.salesCount === "number")
+      .sort((a, b) => (b.salesCount ?? 0) - (a.salesCount ?? 0)),
     [frames, hasSalesMetrics],
   );
-  const sponsoredFrames = frames.some((frame) => frame.sponsored)
-    ? frames.filter((frame) => frame.sponsored)
-    : DEMO_FRAMES.filter((frame) => frame.sponsored);
+  const sponsoredFrames = frames.filter((frame) => frame.sponsored);
   const hasRealEngagement = frames.some((frame) => frame.engagement > 0);
 
   return (
     <>
-      {(notice || !hasRealEngagement || !hasSalesMetrics) && (
+      {(notice || error || (!loading && (!hasRealEngagement || !hasSalesMetrics))) && (
         <div className="border-y border-stone-200 bg-[#eee7dc] px-5 py-3 text-center text-sm text-stone-700 dark:border-white/10 dark:bg-[#25221d] dark:text-stone-200">
-          {notice ?? "Les tendances et ventes sont présentées à titre de démonstration tant que ces indicateurs ne sont pas fournis par l’API."}
-          {isDemo && <span className="ml-1 font-semibold">Données de démonstration.</span>}
+          {error ?? notice ?? "Les indicateurs de tendance et de ventes ne sont pas encore fournis par l’API."}
         </div>
       )}
 
@@ -141,7 +135,7 @@ export default function MarketplaceHome() {
             : "Une sélection tendance pour découvrir nos montures."}
           href="/lunettes?tri=pertinence"
         />
-        <FrameCarousel frames={recommended} />
+        {loading ? <p role="status">Chargement des montures publiées…</p> : <FrameCarousel frames={recommended} />}
       </RevealSection>
 
       <RevealSection className="border-y border-stone-200/70 bg-[#eee7dc] dark:border-white/10 dark:bg-[#211e19]">
@@ -151,7 +145,7 @@ export default function MarketplaceHome() {
           description="Les montures récemment publiées par nos opticiens partenaires."
           href="/lunettes?tri=nouveautes"
         />
-        <FrameCarousel frames={arrivals} badge="Nouveau" />
+        {loading ? <p role="status">Chargement des nouveautés…</p> : <FrameCarousel frames={arrivals} badge="Nouveau" />}
       </RevealSection>
 
       <RevealSection className="bg-[#f5f0e7] dark:bg-[#181613]">
@@ -161,7 +155,7 @@ export default function MarketplaceHome() {
           description="Les modèles qui retiennent l’attention cette saison."
           href="/lunettes?tri=tendances"
         />
-        <FrameCarousel frames={trending} badge="Tendance" />
+        {loading ? <p role="status">Chargement des montures tendance…</p> : <FrameCarousel frames={trending} badge="Tendance" />}
       </RevealSection>
 
       <RevealSection className="border-y border-stone-200/70 bg-[#eee7dc] dark:border-white/10 dark:bg-[#211e19]">
@@ -169,7 +163,6 @@ export default function MarketplaceHome() {
           stores={stores}
           frames={frames}
           loading={loading}
-          isDemo={isDemo}
           error={error}
         />
       </RevealSection>
@@ -178,10 +171,10 @@ export default function MarketplaceHome() {
         <SectionHeading
           kicker="Plébiscitées"
           title="Les plus vendues"
-          description={hasSalesMetrics ? "Les montures en tête des ventes disponibles." : "Sélection de démonstration : les ventes ne sont pas encore exposées par l’API."}
+          description={hasSalesMetrics ? "Les montures en tête des ventes disponibles." : "Les meilleures ventes seront affichées lorsque ces indicateurs seront disponibles."}
           href="/lunettes?tri=meilleures-ventes"
         />
-        <FrameCarousel frames={bestSellers} badge="Best-seller" />
+        {hasSalesMetrics ? <FrameCarousel frames={bestSellers} badge="Best-seller" /> : <p className="text-sm text-stone-600 dark:text-stone-300">Aucune donnée de vente disponible.</p>}
       </RevealSection>
 
       <RevealSection className="border-y border-stone-200/70 bg-[#eee7dc] dark:border-white/10 dark:bg-[#211e19]">
@@ -191,7 +184,7 @@ export default function MarketplaceHome() {
           description="Des maisons de proximité, sélectionnées pour leur regard et leur savoir-faire."
           href="/opticiens?type=independant"
         />
-        <StoreCarousel stores={independentStores} />
+        {loading ? <p role="status">Chargement des opticiens…</p> : independentStores.length ? <StoreCarousel stores={independentStores} /> : <p className="text-sm text-stone-600 dark:text-stone-300">Aucun opticien indépendant publié pour le moment.</p>}
       </RevealSection>
 
       <RevealSection className="bg-[#f5f0e7] dark:bg-[#181613]">
@@ -201,7 +194,7 @@ export default function MarketplaceHome() {
           description="Des mises en avant promotionnelles clairement identifiées."
           href="/lunettes?filtre=sponsorise"
         />
-        <FrameCarousel frames={sponsoredFrames} badge="Sponsorisé" />
+        {sponsoredFrames.length ? <FrameCarousel frames={sponsoredFrames} badge="Sponsorisé" /> : <p className="text-sm text-stone-600 dark:text-stone-300">Aucune monture sponsorisée disponible.</p>}
       </RevealSection>
 
       <RevealSection className="bg-[#f5f0e7] dark:bg-[#181613]">

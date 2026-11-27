@@ -5,9 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useState } from "react";
 import { MapPin } from "lucide-react";
-import type { Frame, FrameColorOption } from "../../data/marketplace-demo";
+import type { Frame, FrameColorOption } from "../../lib/marketplace-types";
 import { getFrameHref } from "../../lib/marketplace";
-import { isFavoriteProductId } from "@/lib/favorites";
+import type { CatalogProduct } from "@/services/products.service";
 import FavoriteButton from "@/app/components/Favorites/FavoriteButton";
 import { useReducedMotion } from "../../../lib/motion/useReducedMotion";
 import ColorSwatches from "./ColorSwatches";
@@ -80,6 +80,21 @@ export default function ProductCard({ frame, badge }: { frame: Frame; badge?: st
   const sponsored = frame.sponsored || badge?.toLocaleLowerCase("fr") === "sponsorisé";
   const href = getFrameHref(frame);
   const canvasActive = viewerRequested && ownsViewer && Boolean(frame.modelUrl);
+  const favoriteProduct: CatalogProduct = {
+    id: frame.productId,
+    nom: frame.name,
+    slug: frame.slug,
+    marque: frame.brand,
+    fabricant: null,
+    type: frame.category,
+    categorie: frame.category,
+    imageUrl: frame.image,
+    price: String(frame.price),
+    currency: frame.currency,
+    storeId: frame.storeId,
+    storeName: frame.storeName,
+    frameShape: frame.shape,
+  };
 
   return (
     <article className="min-w-0 snap-start">
@@ -129,12 +144,11 @@ export default function ProductCard({ frame, badge }: { frame: Frame; badge?: st
                 {badge}
               </span>
             ) : null}
-            {isFavoriteProductId(frame.productId) && (
-              <FavoriteButton
-                productId={frame.productId}
-                dark
-              />
-            )}
+            <FavoriteButton
+              productId={frame.productId}
+              product={favoriteProduct}
+              dark
+            />
           </div>
 
           <div className="pointer-events-none relative z-20 flex flex-1 flex-col px-4 pb-4 pt-1.5 sm:px-5 sm:pb-5">

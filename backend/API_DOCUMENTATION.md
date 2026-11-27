@@ -318,12 +318,14 @@ checkout URLs, and internal failure details are never returned.
 - `GET|POST /api/v1/clients/me/prescriptions` and
   `GET|PATCH|DELETE /api/v1/clients/me/prescriptions/:prescriptionId` — prescription and
   eye-specific data scoped to the authenticated user's client profile.
-- `GET /api/v1/users/me/favorites/products` lists the authenticated user's products;
-  `GET /api/v1/users/me/favorites/products/:productId` checks a product's favorite status.
+- `GET /api/v1/users/me/favorites/products` lists the authenticated user's products
+  and published stock frames; `GET /api/v1/users/me/favorites/products/:productId`
+  checks either type's favorite status.
 - `POST|DELETE /api/v1/users/me/favorites/products/:productId` are owner-scoped and
   `POST` is idempotent. `GET|POST|DELETE /api/v1/users/me/favorites/stores[/:storeId]`
   are owner-scoped favorites for active stores. Product favorites include the active
-  product image and lowest available active store-listing price when present.
+  product image and lowest available active store-listing price when present; stock
+  frame favorites require a published, in-stock frame at an active store.
 
 ### Social
 

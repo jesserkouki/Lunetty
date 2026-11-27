@@ -8,6 +8,7 @@ import {
   ConceptionVerreStock,
   FrameImageReviewStatus,
   Prisma,
+  StatutMagasin,
   TraitementVerreStock,
   TypeMouvementStock,
   TypeArticleStock,
@@ -59,6 +60,9 @@ const stockSelect = {
   catalogueProduct: {
     select: { id: true, brand: true, reference: true, model: true },
   },
+  catalogueVariant: {
+    select: { id: true, colorCode: true, colorName: true, ean: true },
+  },
   conception_verre: true,
   traitement_verre: true,
   puissance_droite: true,
@@ -69,6 +73,8 @@ const stockSelect = {
   quantite_disponible: true,
   quantite_reservee: true,
   seuil_reapprovisionnement: true,
+  prix_vente: true,
+  est_publie: true,
   modifie_le: true,
 } satisfies Prisma.StockSelect;
 
@@ -82,6 +88,11 @@ export class InventoryService {
 
   async list(userId: string, storeId: string, pagination: PaginationDto) {
     await this.authorize(userId, storeId, 'inventory.view');
+    const store = await this.prisma.magasin.findFirst({
+      where: { id: storeId, supprime_le: null },
+      select: { devise: true },
+    });
+    if (!store) throw new NotFoundException('Store not found');
     const where: Prisma.StockWhereInput = {
       location: { magasin_id: storeId },
     };
@@ -128,7 +139,117 @@ export class InventoryService {
       }),
       this.prisma.stock.count({ where }),
     ]);
-    return paginated(data, total, pagination.page, pagination.limit);
+    return {
+      ...paginated(data, total, pagination.page, pagination.limit),
+      currency: store.devise,
+    };
+  }
+
+  async listPublishedFrames(storeId: string, pagination: PaginationDto) {
+    const store = await this.prisma.magasin.findFirst({
+      where: {
+        id: storeId,
+        statut: StatutMagasin.ACTIVE,
+        supprime_le: null,
+      },
+      select: { devise: true },
+    });
+    if (!store) throw new NotFoundException('Store not found');
+
+    const where: Prisma.StockWhereInput = {
+      type_article: TypeArticleStock.MONTURE,
+      est_publie: true,
+      prix_vente: { gt: new Prisma.Decimal(0) },
+      quantite_disponible: { gt: 0 },
+      location: {
+        magasin_id: storeId,
+        magasin: { is: { statut: StatutMagasin.ACTIVE, supprime_le: null } },
+      },
+      AND: [
+        {
+          OR: [
+            { catalogueProductId: null },
+            { catalogueProduct: { is: { isActive: true } } },
+          ],
+        },
+        {
+          OR: [
+            { catalogueVariantId: null },
+            {
+              catalogueVariant: {
+                is: { isActive: true, deletedAt: null },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const stocks = await this.prisma.stock.findMany({
+        where,
+        select: {
+          id: true,
+          marque_reference: true,
+          prix_vente: true,
+          quantite_disponible: true,
+          quantite_reservee: true,
+          cree_le: true,
+          catalogueProduct: {
+            select: { brand: true, reference: true, model: true },
+          },
+          catalogueVariant: { select: { colorName: true } },
+          catalogueImage: {
+            select: {
+              imageUrl: true,
+              isVerified: true,
+              product: { select: { isActive: true } },
+            },
+          },
+        },
+        orderBy: { cree_le: 'desc' },
+      });
+
+    const availableStocks = stocks.filter(
+      (stock) =>
+        stock.prix_vente !== null &&
+        stock.prix_vente.gt(0) &&
+        stock.quantite_disponible > stock.quantite_reservee,
+    );
+    const data = availableStocks
+      .slice(pagination.skip, pagination.skip + pagination.limit)
+      .map((stock) => {
+      const product = stock.catalogueProduct;
+      const brand = product?.brand ?? '';
+      const reference = product?.reference ?? stock.marque_reference ?? '';
+      const fallbackName =
+        [brand, reference].filter(Boolean).join(' ') ||
+        stock.marque_reference ||
+        'Monture';
+      const name = product?.model || fallbackName;
+      const image =
+        stock.catalogueImage?.isVerified &&
+        stock.catalogueImage.product.isActive
+          ? stock.catalogueImage.imageUrl
+          : null;
+      return {
+        id: stock.id,
+        name,
+        brand,
+        reference,
+        color: stock.catalogueVariant?.colorName ?? null,
+        price: stock.prix_vente!.toString(),
+        currency: store.devise,
+        imageUrl: image,
+        available: true,
+        createdAt: stock.cree_le.toISOString(),
+      };
+    });
+
+    return paginated(
+      data,
+      availableStocks.length,
+      pagination.page,
+      pagination.limit,
+    );
   }
 
   async authorizeReferenceScan(userId: string, storeId: string) {
@@ -334,6 +455,7 @@ export class InventoryService {
               : {}),
             quantite_disponible: input.quantite_disponible,
             seuil_reapprovisionnement: input.seuil_reapprovisionnement,
+            prix_vente: new Prisma.Decimal(input.prix_vente),
           },
           select: stockSelect,
         });
@@ -364,6 +486,8 @@ export class InventoryService {
             quantityOnHand: stock.quantite_disponible,
             quantityReserved: stock.quantite_reservee,
             reorderThreshold: stock.seuil_reapprovisionnement,
+            sellingPrice: stock.prix_vente?.toString(),
+            published: stock.est_publie,
           },
         });
         return stock;
@@ -446,6 +570,10 @@ export class InventoryService {
         id: true,
         type_article: true,
         seuil_reapprovisionnement: true,
+        prix_vente: true,
+        est_publie: true,
+        quantite_disponible: true,
+        quantite_reservee: true,
         catalogueProductId: true,
         catalogueVariantId: true,
         catalogueImageId: true,
@@ -453,6 +581,30 @@ export class InventoryService {
       },
     });
     if (!current) throw new NotFoundException('Inventory record not found');
+    if (Object.keys(input).length === 0) {
+      throw new BadRequestException('At least one stock field is required');
+    }
+    if (
+      input.prix_vente !== undefined &&
+      !isValidSellingPrice(input.prix_vente)
+    ) {
+      throw new BadRequestException(
+        'The selling price must be a positive amount with up to three decimal places.',
+      );
+    }
+    if (input.est_publie === true) {
+      if (current.type_article !== TypeArticleStock.MONTURE) {
+        throw new BadRequestException(
+          'Only frame stock items can be published to the public shop.',
+        );
+      }
+      const price = input.prix_vente ?? current.prix_vente?.toNumber();
+      if (price === undefined || !isValidSellingPrice(price)) {
+        throw new BadRequestException(
+          'Set a valid selling price before publishing this frame.',
+        );
+      }
+    }
 
     if (input.catalogueProductId === null && input.catalogueVariantId === undefined) {
       throw new BadRequestException(
@@ -595,10 +747,25 @@ export class InventoryService {
         where: {
           id: stockId,
           location: { magasin_id: storeId },
+          type_article: current.type_article,
           seuil_reapprovisionnement: current.seuil_reapprovisionnement,
+          prix_vente: current.prix_vente,
+          est_publie: current.est_publie,
+          catalogueProductId: current.catalogueProductId,
+          catalogueVariantId: current.catalogueVariantId,
+          catalogueImageId: current.catalogueImageId,
+          frameImageUploadId: current.frameImageUploadId,
         },
         data: {
-          seuil_reapprovisionnement: input.seuil_reapprovisionnement,
+          ...(input.seuil_reapprovisionnement !== undefined
+            ? { seuil_reapprovisionnement: input.seuil_reapprovisionnement }
+            : {}),
+          ...(input.prix_vente !== undefined
+            ? { prix_vente: new Prisma.Decimal(input.prix_vente) }
+            : {}),
+          ...(input.est_publie !== undefined
+            ? { est_publie: input.est_publie }
+            : {}),
           ...(input.catalogueProductId !== undefined ||
           input.catalogueVariantId !== undefined
             ? {
@@ -624,19 +791,36 @@ export class InventoryService {
         actorId: userId,
         action: imageChanged
           ? 'inventory.stock_image_updated'
-          : 'inventory.reorder_threshold_changed',
+          : input.prix_vente !== undefined
+            ? 'inventory.stock_price_updated'
+            : input.est_publie !== undefined
+              ? 'inventory.stock_publication_updated'
+              : 'inventory.reorder_threshold_changed',
         entityType: 'stock',
         entityId: stockId,
         description: imageChanged
           ? 'Inventory frame image updated'
-          : 'Inventory reorder threshold changed',
+          : input.prix_vente !== undefined
+            ? 'Inventory selling price changed'
+            : input.est_publie !== undefined
+              ? 'Inventory frame publication changed'
+              : 'Inventory reorder threshold changed',
         before: {
           reorderThreshold: current.seuil_reapprovisionnement,
           catalogueImageId: current.catalogueImageId,
           frameImageUploadId: current.frameImageUploadId,
+          sellingPrice: current.prix_vente?.toString() ?? null,
+          published: current.est_publie,
         },
         after: {
-          reorderThreshold: input.seuil_reapprovisionnement,
+          reorderThreshold:
+            input.seuil_reapprovisionnement ??
+            current.seuil_reapprovisionnement,
+          sellingPrice:
+            input.prix_vente?.toString() ??
+            current.prix_vente?.toString() ??
+            null,
+          published: input.est_publie ?? current.est_publie,
           catalogueImageId: resolvedCatalogueImageId,
           frameImageUploadId: resolvedFrameImageUploadId,
         },
@@ -1069,6 +1253,12 @@ function isUniqueConflict(error: unknown): boolean {
 }
 
 function validateStockItem(input: CreateStockDto): void {
+  if (!isValidSellingPrice(input.prix_vente)) {
+    throw new BadRequestException(
+      'The selling price must be a positive amount with up to three decimal places.',
+    );
+  }
+
   if (
     input.type_article === TypeArticleStock.VERRE_VUE ||
     input.type_article === TypeArticleStock.VERRE_SOLEIL
@@ -1105,5 +1295,22 @@ function validateStockItem(input: CreateStockDto): void {
         'Pour enregistrer une monture, indiquez sa marque ou référence, son âge, son sexe et sa taille.',
       );
     }
+    return;
   }
+
+  if (
+    input.type_article === TypeArticleStock.LENTILLE &&
+    !input.marque_reference?.trim()
+  ) {
+    throw new BadRequestException(
+      'Pour enregistrer une lentille, indiquez sa marque ou sa référence.',
+    );
+  }
+}
+
+function isValidSellingPrice(value: number): boolean {
+  if (!Number.isFinite(value) || value <= 0 || value > 999999999.999) {
+    return false;
+  }
+  return new Prisma.Decimal(value).decimalPlaces() <= 3;
 }

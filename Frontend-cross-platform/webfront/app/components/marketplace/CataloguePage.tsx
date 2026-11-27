@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FrameCard } from "./MarketplaceUI";
 import PageHero from "./PageHero";
 import { useMarketplaceData } from "./useMarketplaceData";
-import type { Frame } from "../../data/marketplace-demo";
+import type { Frame } from "../../lib/marketplace-types";
 import { getFrameHref } from "../../lib/marketplace";
 import { useReducedMotion } from "../../../lib/motion/useReducedMotion";
 
@@ -173,6 +173,7 @@ export function CatalogueExperience({
   reload,
   showIntro = true,
   showDemoNotice = true,
+  stickyFilters = true,
 }: {
   frames: Frame[];
   isDemo: boolean;
@@ -182,6 +183,7 @@ export function CatalogueExperience({
   reload: () => Promise<void>;
   showIntro?: boolean;
   showDemoNotice?: boolean;
+  stickyFilters?: boolean;
 }) {
   const reducedMotion = useReducedMotion();
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -346,31 +348,47 @@ export function CatalogueExperience({
   const Root = showIntro ? "main" : "div";
   return (
     <Root id={showIntro ? "contenu" : undefined} className={`min-h-screen bg-lunetty-cream px-4 pb-20 text-lunetty-ink sm:px-8 lg:px-12 ${showIntro ? "pt-28" : "pt-10"}`}>
+      {showIntro && (
+        <PageHero
+          image="/images/lunetty-optician-campaign.jpg"
+          alt="Une cliente découvre des montures chez un opticien Lunetty"
+          surtitre="La sélection Lunetty"
+          titre="Toutes les montures"
+          sousTitre="Explorez les créations de nos opticiens partenaires et trouvez la monture qui vous ressemble."
+          imagePosition={{ desktop: "center 40%", mobile: "center 42%" }}
+          statistic={`${frames.length} monture${frames.length === 1 ? "" : "s"}`}
+          badge={isDemo && process.env.NODE_ENV !== "production" ? "Démo" : undefined}
+          layout="contained"
+          imageSizes="(min-width: 1728px) 1664px, calc(100vw - 64px)"
+          parallax={false}
+        />
+      )}
       <div className="mx-auto max-w-[1600px]">
-        {showIntro && (
-          <PageHero
-            image="/images/catalogue/boutique-hero-v2.jpg"
-            alt="Une cliente découvre son style dans une boutique Lunetty"
-            surtitre="La sélection Lunetty"
-            titre="Toutes les montures"
-            sousTitre="Explorez les créations de nos opticiens partenaires et trouvez la monture qui vous ressemble."
-            imagePosition={{ mobile: "55% 25%", desktop: "center 35%" }}
-            layout="contained"
-            imageSizes="(min-width: 1728px) 1664px, calc(100vw - 32px)"
-            zoomStart={1.03}
-            parallax={false}
-            badge={showDemoNotice && isDemo && process.env.NODE_ENV !== "production" ? "Démo" : undefined}
-            actions={[
-              {
-                label: "Explorer la sélection",
-                onClick: () => searchSectionRef.current?.scrollIntoView({
-                  behavior: reducedMotion ? "auto" : "smooth",
-                  block: "center",
-                }),
-              },
-              { label: "Conseil personnalisé", href: "/conseiller", variant: "secondary" },
-            ]}
-          />
+        <div className="mb-10 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          {!showIntro && (
+            <div>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-accent">La sélection Lunetty</p>
+              <h1 className="font-serif text-5xl sm:text-6xl">Toutes les montures</h1>
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-300">Explorez les créations de nos opticiens partenaires et trouvez la monture qui vous ressemble.</p>
+            </div>
+          )}
+          <label className="flex items-center gap-3 text-sm font-medium">
+            Trier par
+            <select value={filters.sort} onChange={(event) => setFilter("sort", event.target.value)} className="min-h-11 border border-stone-300 bg-[#faf8f3] px-3 text-stone-900 dark:border-stone-600 dark:bg-[#211e19] dark:text-[#f5f0e7]">
+              <option value="pertinence">Pertinence</option>
+              <option value="nouveautes">Nouveautés</option>
+              <option value="tendances">Tendances</option>
+              <option value="meilleures-ventes">Meilleures ventes</option>
+              <option value="prix-croissant">Prix croissant</option>
+              <option value="prix-decroissant">Prix décroissant</option>
+            </select>
+          </label>
+        </div>
+
+        {(notice || error) && (
+          <p role="status" className="mb-6 border border-stone-300 bg-[#eee7dc] px-4 py-3 text-sm text-stone-700 dark:border-white/10 dark:bg-[#25221d] dark:text-stone-200">
+            {error ?? notice}
+          </p>
         )}
 
         {error && (
@@ -426,7 +444,7 @@ export function CatalogueExperience({
           )}
         </div>
 
-        <div className="sticky top-20 z-30 -mx-4 mb-5 border-y border-lunetty-line bg-lunetty-cream/95 px-4 py-3 backdrop-blur-xl sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12">
+        <div className={`${stickyFilters ? "sticky top-20 z-30 " : ""}-mx-4 mb-5 border-y border-lunetty-line bg-lunetty-cream/95 px-4 py-3 backdrop-blur-xl sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12`}>
           <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
             <div className="flex shrink-0 items-center gap-1.5 pr-2">
               {options.shapes.map((shape) => (
@@ -479,80 +497,17 @@ export function CatalogueExperience({
           </div>
         </div>
 
-        <ActiveFilters filters={filters} defaults={defaults} options={options} onRemove={(key, value) => {
-          if (key === "style" || key === "color" || key === "material") {
-            toggleMulti(key, value);
-          } else if (key === "price") {
-            setFilters((current) => ({ ...current, minPrice: defaults.minPrice, maxPrice: defaults.maxPrice }));
-          } else if (key === "sponsored") {
-            setFilter("sponsored", false);
-          } else {
-            setFilter(key, "" as never);
-          }
-        }} onClear={clearFilters} />
-
-        <section aria-label="Résultats du catalogue" className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-lunetty-line pb-4">
-          <p aria-live="polite" aria-atomic="true" className="text-base font-semibold text-lunetty-ink">
-            {loading ? "Recherche des montures…" : `${visibleFrames.length} monture${visibleFrames.length === 1 ? "" : "s"}`}
-          </p>
-          <div className="ml-auto flex items-center gap-2">
-            <div className="relative">
-              <button type="button" aria-haspopup="listbox" aria-expanded={sortOpen} onClick={() => setSortOpen((value) => !value)} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-lunetty-line bg-lunetty-surface px-4 text-sm font-semibold">
-                Trier : {selectedSort}<ChevronDown aria-hidden="true" className="h-4 w-4" />
-              </button>
-              {sortOpen && (
-                <div role="listbox" aria-label="Trier les montures" className="absolute right-0 top-full z-30 mt-2 min-w-56 rounded-2xl border border-lunetty-line bg-lunetty-surface p-2 shadow-xl">
-                  {SORT_OPTIONS.map(([value, label]) => (
-                    <button key={value} type="button" role="option" aria-selected={filters.sort === value} onClick={() => { setFilter("sort", value); setSortOpen(false); }} className={`flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-sm ${filters.sort === value ? "bg-lunetty-cream text-lunetty-ink" : "text-lunetty-muted hover:bg-lunetty-cream"}`}>
-                      {label}{filters.sort === value && <Check aria-hidden="true" className="h-4 w-4 text-lunetty-gold-strong" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div role="group" aria-label="Affichage des montures" className="hidden items-center rounded-full border border-lunetty-line bg-lunetty-surface p-1 sm:flex">
-              <button type="button" aria-label="Grille large" aria-pressed={!compact} onClick={() => setCompact(false)} className={`grid h-9 w-9 place-items-center rounded-full ${!compact ? "bg-lunetty-ink text-lunetty-cream" : "text-lunetty-muted"}`}><LayoutGrid aria-hidden="true" className="h-4 w-4" /></button>
-              <button type="button" aria-label="Grille compacte" aria-pressed={compact} onClick={() => setCompact(true)} className={`grid h-9 w-9 place-items-center rounded-full ${compact ? "bg-lunetty-ink text-lunetty-cream" : "text-lunetty-muted"}`}><Grid2X2 aria-hidden="true" className="h-4 w-4" /></button>
-            </div>
+        <div className="mb-6 flex items-baseline justify-between">
+          <p className="text-sm text-stone-600 dark:text-stone-300">{visibleFrames.length} monture{visibleFrames.length === 1 ? "" : "s"}</p>
+        </div>
+        {loading ? (
+          <p role="status" className="border-y border-stone-300 py-12 text-center text-stone-600 dark:border-white/10 dark:text-stone-300">Chargement des montures publiées…</p>
+        ) : visibleFrames.length ? (
+          <div className="grid gap-x-5 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {visibleFrames.map((frame) => <FrameCard key={frame.id} frame={frame} badge={frame.sponsored ? "Sponsorisé" : undefined} />)}
           </div>
-        </section>
-
-        <AnimatePresence mode="wait">
-          {loading ? (
-            <motion.div key="skeletons" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={`grid gap-5 ${compact ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"}`} aria-label="Chargement des montures" role="status">
-              {Array.from({ length: 8 }, (_, index) => <div key={index} className="aspect-[0.73] animate-pulse rounded-[1.35rem] bg-lunetty-surface shadow-sm" />)}
-            </motion.div>
-          ) : visibleFrames.length ? (
-            <motion.div key={`${filters.query}-${filters.shape}-${filters.style.join()}-${filters.color.join()}-${filters.material.join()}-${filters.brand}-${filters.store}-${filters.minPrice}-${filters.maxPrice}-${filters.sponsored}-${filters.sort}-${compact}`} initial={reducedMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reducedMotion ? 0 : 0.24 }} className={`grid items-stretch gap-x-4 gap-y-7 sm:gap-x-5 sm:gap-y-9 ${compact ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"}`}>
-              {visibleFrames.slice(0, visibleCount).map((frame, index) => (
-                <motion.div key={frame.id} initial={reducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reducedMotion ? 0 : 0.32, delay: reducedMotion ? 0 : Math.min(index, 7) * 0.035 }} className="group relative min-w-0">
-                  <FrameCard frame={frame} badge={frame.sponsored ? "Sponsorisé" : undefined} />
-                  <button type="button" onClick={() => setQuickView(frame)} className="absolute left-3 top-3 z-50 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/30 bg-black/55 px-3 text-sm font-semibold text-white opacity-100 backdrop-blur transition hover:bg-black/75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-                    Aperçu rapide<ChevronRight aria-hidden="true" className="h-4 w-4" />
-                  </button>
-                </motion.div>
-              ))}
-            </motion.div>
-          ) : (
-            <motion.section key="empty" initial={reducedMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex min-h-[360px] flex-col items-center justify-center rounded-[2rem] border border-dashed border-lunetty-line bg-lunetty-surface/60 px-6 py-12 text-center">
-              <span className="grid h-16 w-16 place-items-center rounded-full bg-lunetty-gold/15 text-lunetty-gold-strong"><Glasses aria-hidden="true" className="h-8 w-8" /></span>
-              <h2 className="mt-5 text-2xl font-bold">Aucune monture ne correspond à ces filtres.</h2>
-              <p className="mt-2 max-w-md text-base text-lunetty-muted">Essayez de retirer un filtre pour découvrir d’autres modèles.</p>
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-                {filters.query && <button type="button" onClick={() => setFilter("query", "")} className="min-h-11 rounded-full border border-lunetty-line px-4 text-sm font-semibold">Effacer la recherche</button>}
-                {filters.shape && <button type="button" onClick={() => setFilter("shape", "")} className="min-h-11 rounded-full border border-lunetty-line px-4 text-sm font-semibold">Retirer la forme</button>}
-                {(filters.style.length > 0 || filters.color.length > 0 || filters.material.length > 0 || activeCount > 0) && <button type="button" onClick={clearFilters} className="min-h-11 rounded-full bg-lunetty-ink px-5 text-sm font-semibold text-lunetty-cream">Tout effacer</button>}
-              </div>
-            </motion.section>
-          )}
-        </AnimatePresence>
-
-        {!loading && visibleFrames.length > visibleCount && (
-          <div className="mt-10 flex justify-center">
-            <button type="button" onClick={() => setVisibleCount((count) => count + 8)} className="inline-flex min-h-12 items-center gap-2 rounded-full border border-lunetty-line bg-lunetty-surface px-6 text-sm font-semibold transition hover:border-lunetty-gold">
-              Voir {Math.min(8, visibleFrames.length - visibleCount)} montures de plus<ChevronDown aria-hidden="true" className="h-4 w-4" />
-            </button>
-          </div>
+        ) : (
+          <p className="border-y border-stone-300 py-12 text-center text-stone-600 dark:border-white/10 dark:text-stone-300">{frames.length ? "Aucune monture ne correspond à ces filtres." : "Aucune monture n’est publiée pour le moment."}</p>
         )}
       </div>
 

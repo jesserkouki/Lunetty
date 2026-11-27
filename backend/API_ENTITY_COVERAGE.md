@@ -93,6 +93,7 @@ only marked for the service behaviors currently covered by unit tests.
 | `AvisProduit` | Reviews | Public list; user submit/edit/delete | Review author; new reviews pending moderation | Partial; purchase status server-derived |
 | `AvisMagasin` | Reviews | Public list; user submit/edit/delete; admin moderation | Review author; optional completed order association; SUPER_ADMIN moderation | Partial; moderation audit |
 | `ProduitFavori` | Favorites | `GET|POST|DELETE /api/v1/users/me/favorites/products` | Favorite owner; active product required | Partial |
+| `StockFavori` | Favorites | `GET|POST|DELETE /api/v1/users/me/favorites/products` | Favorite owner; published frame stock at an active store | Partial |
 | `MagasinFavori` | Favorites | `GET|POST|DELETE /api/v1/users/me/favorites/stores` | Favorite owner; active store required | Partial |
 | `Publication` | Social | Public feed; own create/update/soft-delete | Author/store membership; public visibility only | Partial |
 | `MediaPublication` | Social | Nested media metadata; private storage integration required | Parent post authorization | Not implemented |

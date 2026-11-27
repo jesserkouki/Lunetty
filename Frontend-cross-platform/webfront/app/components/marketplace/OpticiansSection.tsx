@@ -1,11 +1,12 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { ChevronLeft, ChevronRight, MoveRight } from "lucide-react";
-import { DEMO_STORES, type Frame, type OpticianStore } from "../../data/marketplace-demo";
-import { getOpticians } from "../../lib/marketplace";
+import { ChevronLeft, ChevronRight, List, Map as MapIcon, MapPin, MoveRight, Star } from "lucide-react";
+import type { Frame, OpticianStore, Optician } from "../../lib/marketplace-types";
+import { getOpticians, getStoreHref } from "../../lib/marketplace";
 import { useReducedMotion } from "../../../lib/motion/useReducedMotion";
 import FilterBar from "./FilterBar";
 import OpticianCard from "./OpticianCard";
@@ -15,9 +16,17 @@ type Props = {
   stores: OpticianStore[];
   frames: Frame[];
   loading: boolean;
-  isDemo: boolean;
   error?: string;
 };
+
+const OpticiansMap = dynamic(() => import("./OpticiansMap"), {
+  ssr: false,
+  loading: () => (
+    <div role="status" className="grid min-h-[380px] place-items-center rounded-2xl bg-[#eee7dc] text-sm text-stone-700 dark:bg-[#25221d] dark:text-stone-200">
+      Chargement de la carte…
+    </div>
+  ),
+});
 
 function distanceBetween(from: Coordinates, to: Coordinates) {
   const radians = (degrees: number) => degrees * Math.PI / 180;
@@ -47,15 +56,45 @@ function OpticianSkeleton({ reducedMotion }: { reducedMotion: boolean }) {
   );
 }
 
-export default function OpticiansSection({ stores, frames, loading, isDemo, error }: Props) {
+function StorePreview({ store }: { store: Optician }) {
+  return (
+    <div className="optician-map-preview mt-4 flex flex-col gap-3 rounded-2xl border border-stone-300 bg-[#f9f6f0] p-4 sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:bg-[#211e19]">
+      <div className="min-w-0">
+        <p className="font-serif text-2xl italic text-stone-900 dark:text-[#f5f0e7]">{store.name}</p>
+        <p className="mt-1 flex items-center gap-1.5 text-sm text-stone-700 dark:text-stone-200">
+          <MapPin aria-hidden="true" className="h-4 w-4 shrink-0 text-accent" />
+          {[store.address, store.district, store.city].filter(Boolean).join(", ")}
+        </p>
+        {typeof store.rating === "number" && (
+          <p className="mt-1 flex items-center gap-1 text-sm text-stone-700 dark:text-stone-200">
+            <Star aria-hidden="true" className="h-4 w-4 fill-current text-accent" />
+            {store.rating.toFixed(1)}
+            {typeof store.reviewCount === "number" && ` · ${store.reviewCount} avis`}
+          </p>
+        )}
+      </div>
+      <Link
+        href={getStoreHref(store)}
+        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-stone-900 px-5 text-sm font-semibold text-[#f5f0e7] transition hover:bg-[#806334] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:bg-[#e1c795] dark:text-stone-950"
+      >
+        Voir la boutique
+        <MoveRight aria-hidden="true" className="h-4 w-4" />
+      </Link>
+    </div>
+  );
+}
+
+export default function OpticiansSection({ stores, frames, loading, error }: Props) {
   const reducedMotion = useReducedMotion();
   const carouselRef = useRef<HTMLDivElement>(null);
   const [city, setCity] = useState("");
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
   const [locationMessage, setLocationMessage] = useState("");
+  const [view, setView] = useState<"list" | "map">("list");
+  const [selectedId, setSelectedId] = useState<string | undefined>();
 
   const opticians = useMemo(() => {
-    const mapped = getOpticians(stores, frames, isDemo);
+    const mapped = getOpticians(stores, frames);
     const photoCounts = new Map<string, number>();
     mapped.forEach((store) => {
       if (store.photo) photoCounts.set(store.photo, (photoCounts.get(store.photo) ?? 0) + 1);
@@ -65,9 +104,9 @@ export default function OpticiansSection({ stores, frames, loading, isDemo, erro
         ? { ...store, photo: undefined }
         : store
     ));
-  }, [frames, isDemo, stores]);
+  }, [frames, stores]);
   const cities = useMemo(
-    () => [...new Set([...opticians, ...DEMO_STORES].map((store) => store.city).filter(Boolean))].sort(),
+    () => [...new Set(opticians.map((store) => store.city).filter(Boolean))].sort(),
     [opticians],
   );
   const distances = useMemo(() => {
@@ -93,6 +132,7 @@ export default function OpticiansSection({ stores, frames, loading, isDemo, erro
         return (distanceA ?? Number.MAX_SAFE_INTEGER) - (distanceB ?? Number.MAX_SAFE_INTEGER);
       });
   }, [city, coordinates, distances, opticians]);
+  const selectedOptician = filtered.find((optician) => optician.id === selectedId) ?? filtered[0];
   const requestLocation = () => {
     setLocationMessage("");
     if (!navigator.geolocation) {
@@ -170,7 +210,29 @@ export default function OpticiansSection({ stores, frames, loading, isDemo, erro
         </p>
       )}
 
-      <div className="mt-5">
+      <div className="mt-5 flex justify-end gap-2">
+        <button
+          type="button"
+          aria-pressed={view === "list"}
+          onClick={() => setView("list")}
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-stone-400 px-4 text-sm font-semibold text-stone-900 transition hover:bg-[#eee7dc] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:border-stone-600 dark:text-[#f5f0e7]"
+        >
+          <List aria-hidden="true" className="h-4 w-4" />
+          Liste
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === "map"}
+          onClick={() => setView("map")}
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-stone-400 px-4 text-sm font-semibold text-stone-900 transition hover:bg-[#eee7dc] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent dark:border-stone-600 dark:text-[#f5f0e7]"
+        >
+          <MapIcon aria-hidden="true" className="h-4 w-4" />
+          Carte
+        </button>
+      </div>
+
+      {view === "list" ? (
+        <div className="mt-5">
           {!loading && filtered.length > 1 && (
             <div className="mb-3 flex justify-end gap-2">
               <button
@@ -226,7 +288,28 @@ export default function OpticiansSection({ stores, frames, loading, isDemo, erro
               Aucun opticien dans cette ville, essayez une autre ville.
             </p>
           )}
-      </div>
+        </div>
+      ) : (
+        <div className="mt-5">
+          {loading ? (
+            <div className={`h-[380px] rounded-2xl bg-stone-200 dark:bg-stone-700 ${reducedMotion ? "" : "animate-pulse"}`} />
+          ) : filtered.length ? (
+            <>
+              <OpticiansMap
+                stores={filtered}
+                selectedId={selectedOptician?.id}
+                center={coordinates}
+                onSelect={setSelectedId}
+              />
+              {selectedOptician && <StorePreview store={selectedOptician} />}
+            </>
+          ) : (
+            <p className="my-8 rounded-2xl border border-stone-300 bg-[#f9f6f0] px-5 py-10 text-center text-base text-stone-700 dark:border-white/10 dark:bg-[#211e19] dark:text-stone-200">
+              Aucun opticien dans cette ville, essayez une autre ville.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

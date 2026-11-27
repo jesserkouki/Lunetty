@@ -1,6 +1,6 @@
 "use client";
 
-import type { FrameColorOption } from "../../data/marketplace-demo";
+import type { FrameColorOption } from "../../lib/marketplace-types";
 
 type Props = {
   options: FrameColorOption[];

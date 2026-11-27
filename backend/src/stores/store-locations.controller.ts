@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -19,6 +20,7 @@ import { AuthenticatedRequest } from '../auth/auth.types';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { StoreLocationsService } from './store-locations.service';
 import { CreateStoreLocationDto } from './dto/create-store-location.dto';
+import { CreateStoreLocationsDto } from './dto/create-store-locations.dto';
 import { CreateStoreLocationTypeDto } from './dto/create-store-location-type.dto';
 import { UpdateStoreLocationDto } from './dto/update-store-location.dto';
 import { UpdateStoreLocationTypeDto } from './dto/update-store-location-type.dto';
@@ -81,6 +83,18 @@ export class StoreLocationsController {
     return this.locations.create(user.id, storeId, input);
   }
 
+  @Post('bulk')
+  @ApiOperation({
+    summary: 'Create multiple store inventory locations atomically',
+  })
+  createMany(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('storeId', ParseUUIDPipe) storeId: string,
+    @Body() input: CreateStoreLocationsDto,
+  ) {
+    return this.locations.createMany(user.id, storeId, input.locations);
+  }
+
   @Patch(':locationId')
   @ApiOperation({ summary: 'Update or deactivate a store location' })
   @ApiParam({ name: 'locationId', format: 'uuid' })
@@ -91,5 +105,16 @@ export class StoreLocationsController {
     @Body() input: UpdateStoreLocationDto,
   ) {
     return this.locations.update(user.id, storeId, locationId, input);
+  }
+
+  @Delete(':locationId')
+  @ApiOperation({ summary: 'Delete an empty store inventory location' })
+  @ApiParam({ name: 'locationId', format: 'uuid' })
+  remove(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('storeId', ParseUUIDPipe) storeId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+  ) {
+    return this.locations.remove(user.id, storeId, locationId);
   }
 }

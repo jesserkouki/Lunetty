@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDownUp, MapPin, Search, Store, X } from "lucide-react";
-import type { Frame, OpticianStore } from "../../data/marketplace-demo";
+import { useSearchParams } from "next/navigation";
+import type { Frame, OpticianStore } from "../../lib/marketplace-types";
 import { getStoreOpenStatus } from "./OpenStatusBadge";
 import OpticianCard from "./OpticianCard";
 import PageHero from "./PageHero";
@@ -70,11 +71,18 @@ function ShopsList({
 }
 
 export default function OpticiansPage() {
-  const { stores, frames, isDemo, error, loading, reload } = useMarketplaceData();
+  const searchParams = useSearchParams();
+  const { stores, frames, isDemo, error, notice, loading, reload } = useMarketplaceData();
   const [query, setQuery] = useState("");
   const [city, setCity] = useState("Toutes les villes");
   const [storeFilter, setStoreFilter] = useState<StoreFilter>("all");
   const [sort, setSort] = useState<SortMode>("distance");
+  const [independentOnly, setIndependentOnly] = useState(
+    () => searchParams.get("type") === "independant",
+  );
+  const [nearbyOnly, setNearbyOnly] = useState(
+    () => searchParams.get("tri") === "proximite",
+  );
   const [openStoreIds, setOpenStoreIds] = useState<string[]>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationMessage, setLocationMessage] = useState("");
@@ -141,6 +149,8 @@ export default function OpticiansPage() {
           : storeFrames.some((frame) => matchesCategory(frame, storeFilter)));
       return (!normalizedQuery || searchableText.includes(normalizedQuery)) &&
         (city === "Toutes les villes" || store.city === city) &&
+        (!independentOnly || store.independent === true) &&
+        (!nearbyOnly || typeof store.distanceKm === "number") &&
         matchesFilter;
     });
     return filtered.sort((left, right) => {
@@ -148,13 +158,15 @@ export default function OpticiansPage() {
       if (sort === "newest") return Number(right.isNew) - Number(left.isNew);
       return (left.distanceKm ?? Number.MAX_SAFE_INTEGER) - (right.distanceKm ?? Number.MAX_SAFE_INTEGER);
     });
-  }, [storesWithDistance, framesByStore, query, city, storeFilter, openStoreIds, sort]);
+  }, [storesWithDistance, framesByStore, query, city, storeFilter, openStoreIds, sort, independentOnly, nearbyOnly]);
 
   const resetFilters = () => {
     setQuery("");
     setCity("Toutes les villes");
     setStoreFilter("all");
     setSort("distance");
+    setIndependentOnly(false);
+    setNearbyOnly(false);
     setUserLocation(null);
     setLocationMessage("");
   };
@@ -170,9 +182,11 @@ export default function OpticiansPage() {
         setUserLocation({ latitude: coords.latitude, longitude: coords.longitude });
         setCity("Toutes les villes");
         setSort("distance");
+        setNearbyOnly(true);
       },
       () => {
         setUserLocation(null);
+        setNearbyOnly(false);
         setLocationMessage("Localisation refusée. Choisissez une ville dans la liste.");
       },
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 300_000 },
@@ -267,29 +281,39 @@ export default function OpticiansPage() {
                 {label}
               </button>
             ))}
+            <label className="inline-flex min-h-11 items-center gap-2 rounded-full border border-lunetty-line bg-lunetty-surface px-4 text-sm font-semibold">
+              <input
+                type="checkbox"
+                checked={independentOnly}
+                onChange={(event) => setIndependentOnly(event.target.checked)}
+                className="accent-lunetty-gold-dark"
+              />
+              Indépendants
+            </label>
           </div>
           {locationMessage && <p role="status" className="mt-3 text-sm text-lunetty-muted">{locationMessage}</p>}
         </section>
 
+        {notice && !error && <p role="status" className="mt-8 border border-stone-300 bg-[#eee7dc] px-4 py-3 text-sm text-stone-700 dark:border-white/10 dark:bg-[#25221d] dark:text-stone-200">{notice}</p>}
         {error && (
-          <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-700/30 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+          <div role="alert" className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-700/30 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
             <p>{error}</p>
             <button type="button" onClick={() => void reload()} className="min-h-11 rounded-full border border-current px-4 font-semibold">Réessayer</button>
           </div>
         )}
-
+        <p className="mb-6 mt-8 text-sm text-stone-600 dark:text-stone-300">{visibleStores.length} boutique{visibleStores.length === 1 ? "" : "s"}</p>
         {loading && stores.length === 0 ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-[repeat(auto-fill,minmax(340px,1fr))]">
             {[0, 1, 2, 3].map((index) => <StoreSkeleton key={index} />)}
           </div>
-        ) : visibleStores.length === 0 ? (
+        ) : visibleStores.length ? (
+          <ShopsList stores={visibleStores} framesByStore={framesByStore} />
+        ) : (
           <div className="rounded-[1.7rem] border border-lunetty-line bg-lunetty-surface px-6 py-16 text-center">
             <Store aria-hidden="true" className="mx-auto h-10 w-10 text-lunetty-gold-dark" />
             <h2 className="mt-4 font-serif text-2xl font-semibold">Aucune boutique ne correspond</h2>
             <button type="button" onClick={resetFilters} className="mt-5 min-h-11 rounded-full bg-lunetty-ink px-5 text-sm font-semibold text-white dark:bg-lunetty-gold dark:text-lunetty-ink">Tout effacer</button>
           </div>
-        ) : (
-          <ShopsList stores={visibleStores} framesByStore={framesByStore} />
         )}
       </div>
     </main>

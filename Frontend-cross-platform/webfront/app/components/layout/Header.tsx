@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Heart, Search, ShoppingBag } from "lucide-react";
+import { Heart, Search } from "lucide-react";
 import AuthModal from "../Auth/AuthModal";
 import Logo from "../ui/Logo";
 import { useAuth as useAppAuth } from "@/lib/auth-context";
@@ -22,7 +22,6 @@ const LINKS = [
 const SHOP_LINKS = [
   { href: "/lunettes", label: "Rechercher des montures", Icon: Search },
   { href: "/client/favorites", label: "Mes favoris", Icon: Heart },
-  { href: "/client/cart", label: "Mon panier", Icon: ShoppingBag },
 ];
 
 const noopSubscribe = () => () => {};

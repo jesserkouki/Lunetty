@@ -170,6 +170,7 @@ enum TypeArticleStock {
   VERRE_VUE    @map("PRESCRIPTION_GLASSES")
   VERRE_SOLEIL @map("SUN_GLASSES")
   MONTURE      @map("FRAME")
+  LENTILLE     @map("CONTACT_LENS")
 
   @@map("InventoryItemType")
 }
@@ -377,6 +378,7 @@ model Utilisateur {
   avis_produits                   AvisProduit[]
   avis_magasins                   AvisMagasin[]
   produits_favoris                ProduitFavori[]
+  stocks_favoris                  StockFavori[]
   magasins_favoris                MagasinFavori[]
   publications_redigees           Publication[]              @relation("AuteurPublication")
   commentaires                    CommentairePublication[]
@@ -719,6 +721,8 @@ model Stock {
   quantite_disponible       Int                      @default(0) @map("quantity_on_hand")
   quantite_reservee         Int                      @default(0) @map("quantity_reserved")
   seuil_reapprovisionnement Int                      @default(0) @map("reorder_level")
+  prix_vente                Decimal?                 @map("selling_price") @db.Decimal(12, 3)
+  est_publie                Boolean                  @default(false) @map("is_published")
   cree_le                   DateTime                 @default(now()) @db.Timestamptz(6)
   modifie_le                DateTime                 @updatedAt @db.Timestamptz(6)
   variante_annonce          VarianteAnnonceMagasin?  @relation(fields: [storeListingVariantId], references: [id], onDelete: Cascade)
@@ -728,6 +732,7 @@ model Stock {
   frameImageUpload          FrameImageUpload?        @relation(fields: [frameImageUploadId], references: [id], onDelete: SetNull)
   location                  EmplacementMagasin       @relation(fields: [emplacement_id], references: [id], onDelete: Restrict)
   mouvements                MouvementStock[]
+  favoris                   StockFavori[]
 
   @@unique([storeListingVariantId, emplacement_id])
   @@index([emplacement_id, type_article])
@@ -1025,6 +1030,19 @@ model ProduitFavori {
 
   @@unique([utilisateur_id, produit_id])
   @@map("produits_favoris")
+}
+
+model StockFavori {
+  id             String      @id @default(uuid()) @db.Uuid
+  utilisateur_id String      @db.Uuid
+  stock_id       String      @db.Uuid
+  cree_le        DateTime    @default(now()) @db.Timestamptz(6)
+  utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  stock          Stock       @relation(fields: [stock_id], references: [id], onDelete: Cascade)
+
+  @@unique([utilisateur_id, stock_id])
+  @@index([stock_id])
+  @@map("stocks_favoris")
 }
 
 model MagasinFavori {

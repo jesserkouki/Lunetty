@@ -2,14 +2,17 @@
 
 import { Heart } from "lucide-react";
 import { useFavorites } from "@/contexts/FavoritesContext";
+import type { CatalogProduct } from "@/services/products.service";
 
 type Props = {
   productId: string;
+  product: CatalogProduct;
   dark: boolean;
 };
 
 export default function FavoriteButton({
   productId,
+  product,
   dark,
 }: Props) {
   const {
@@ -32,7 +35,7 @@ export default function FavoriteButton({
       aria-pressed={active}
       title={label}
       disabled={disabled}
-      onClick={() => void toggleFavorite(productId)}
+      onClick={() => void toggleFavorite(productId, product)}
       className={`group pointer-events-auto absolute top-3 right-3 z-40 flex h-10 w-10 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-all duration-200 hover:scale-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${
         dark
           ? "border-white/15 bg-[#121110]/80 text-white hover:bg-[#121110]"

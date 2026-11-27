@@ -23,7 +23,9 @@ export class FavouritesController {
   constructor(private readonly favourites: FavouritesService) {}
 
   @Get('products')
-  @ApiOperation({ summary: "List the authenticated user's favorite products" })
+  @ApiOperation({
+    summary: "List the authenticated user's favorite products and stock frames",
+  })
   products(
     @CurrentUser() user: AuthenticatedRequest['user'],
     @Query() pagination: PaginationDto,
@@ -32,7 +34,9 @@ export class FavouritesController {
   }
 
   @Get('products/:productId')
-  @ApiOperation({ summary: "Check the authenticated user's favorite status" })
+  @ApiOperation({
+    summary: "Check favorite status for a product or published stock frame",
+  })
   @ApiParam({ name: 'productId', format: 'uuid' })
   isProductFavorite(
     @CurrentUser() user: AuthenticatedRequest['user'],
@@ -42,7 +46,9 @@ export class FavouritesController {
   }
 
   @Post('products/:productId')
-  @ApiOperation({ summary: 'Favorite an active catalog product' })
+  @ApiOperation({
+    summary: 'Favorite an active catalog product or published stock frame',
+  })
   @ApiParam({ name: 'productId', format: 'uuid' })
   addProduct(
     @CurrentUser() user: AuthenticatedRequest['user'],
@@ -52,7 +58,7 @@ export class FavouritesController {
   }
 
   @Delete('products/:productId')
-  @ApiOperation({ summary: 'Remove a product from favorites' })
+  @ApiOperation({ summary: 'Remove a product or stock frame from favorites' })
   @ApiParam({ name: 'productId', format: 'uuid' })
   removeProduct(
     @CurrentUser() user: AuthenticatedRequest['user'],

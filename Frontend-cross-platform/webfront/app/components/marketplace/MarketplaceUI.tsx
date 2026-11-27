@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { MoveRight, Star } from "lucide-react";
-import type { Frame, OpticianStore } from "../../data/marketplace-demo";
+import type { Frame, OpticianStore } from "../../lib/marketplace-types";
 import { getStoreHref } from "../../lib/marketplace";
 import ProductCard from "./ProductCard";
 

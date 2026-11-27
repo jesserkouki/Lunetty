@@ -179,6 +179,92 @@ export class StoreLocationsService {
     }
   }
 
+  async createMany(
+    userId: string,
+    storeId: string,
+    inputs: CreateStoreLocationDto[],
+  ) {
+    await this.storeAuthorization.requirePermission(
+      userId,
+      storeId,
+      'inventory.manage_locations',
+    );
+    if (inputs.length < 1 || inputs.length > 50) {
+      throw new BadRequestException(
+        'Le nombre d’emplacements doit être compris entre 1 et 50.',
+      );
+    }
+    if (inputs.some((input) => !input.nom.trim())) {
+      throw new BadRequestException(
+        'Le nom de chaque emplacement est obligatoire.',
+      );
+    }
+
+    const first = inputs[0];
+    const selectedType = {
+      type: first.type ?? 'STORE',
+      type_personnalise_id: first.type_personnalise_id ?? null,
+    };
+    if (
+      inputs.some(
+        (input) =>
+          (input.type ?? 'STORE') !== selectedType.type ||
+          (input.type_personnalise_id ?? null) !==
+            selectedType.type_personnalise_id,
+      )
+    ) {
+      throw new BadRequestException(
+        'Tous les emplacements du lot doivent utiliser le même type.',
+      );
+    }
+    if (inputs.filter((input) => input.est_par_defaut).length > 1) {
+      throw new BadRequestException(
+        'Un seul emplacement du lot peut être défini par défaut.',
+      );
+    }
+    await this.assertLocationType(
+      storeId,
+      selectedType.type_personnalise_id,
+    );
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        if (inputs.some((input) => input.est_par_defaut)) {
+          await tx.emplacementMagasin.updateMany({
+            where: { magasin_id: storeId, est_par_defaut: true },
+            data: { est_par_defaut: false },
+          });
+        }
+        return Promise.all(
+          inputs.map((input) =>
+            tx.emplacementMagasin.create({
+              data: {
+                magasin_id: storeId,
+                nom: input.nom,
+                ...(input.code !== undefined ? { code: input.code } : {}),
+                ...(input.type !== undefined ? { type: input.type } : {}),
+                ...(input.type_personnalise_id !== undefined
+                  ? { type_personnalise_id: input.type_personnalise_id }
+                  : {}),
+                ...(input.est_par_defaut !== undefined
+                  ? { est_par_defaut: input.est_par_defaut }
+                  : {}),
+              },
+              select: locationSelect,
+            }),
+          ),
+        );
+      });
+    } catch (error) {
+      if (isUniqueConflict(error)) {
+        throw new ConflictException(
+          'Un code d’emplacement du lot est déjà utilisé dans cette boutique.',
+        );
+      }
+      throw error;
+    }
+  }
+
   async update(
     userId: string,
     storeId: string,
@@ -252,6 +338,49 @@ export class StoreLocationsService {
     }
   }
 
+  async remove(userId: string, storeId: string, locationId: string) {
+    await this.storeAuthorization.requirePermission(
+      userId,
+      storeId,
+      'inventory.manage_locations',
+    );
+    const location = await this.prisma.emplacementMagasin.findFirst({
+      where: { id: locationId, magasin_id: storeId },
+      select: { id: true, _count: { select: { stocks: true } } },
+    });
+    if (!location) {
+      throw new NotFoundException('Emplacement introuvable.');
+    }
+    if (location._count.stocks > 0) {
+      throw new ConflictException(
+        'Impossible de supprimer cet emplacement : du stock y est encore rattaché. Déplacez ou supprimez ce stock, ou désactivez l’emplacement.',
+      );
+    }
+
+    try {
+      const deleted = await this.prisma.emplacementMagasin.deleteMany({
+        where: {
+          id: locationId,
+          magasin_id: storeId,
+          stocks: { none: {} },
+        },
+      });
+      if (deleted.count === 0) {
+        throw new ConflictException(
+          'Impossible de supprimer cet emplacement car du stock y est encore rattaché.',
+        );
+      }
+      return { success: true };
+    } catch (error) {
+      if (isForeignKeyConflict(error)) {
+        throw new ConflictException(
+          'Impossible de supprimer cet emplacement car du stock y est encore rattaché.',
+        );
+      }
+      throw error;
+    }
+  }
+
   private async assertLocationType(storeId: string, typeId?: string | null) {
     if (typeId === undefined || typeId === null) return;
     const type = await this.prisma.typeEmplacementMagasin.findFirst({
@@ -270,5 +399,12 @@ function isUniqueConflict(error: unknown): boolean {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === 'P2002'
+  );
+}
+
+function isForeignKeyConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2003'
   );
 }

@@ -249,7 +249,11 @@ export function AppShell({
         )}
 
         {/* Navigation Links */}
-        <nav className="side-nav opt-nav" aria-label={`${portal} navigation`}>
+        <nav
+          className="side-nav opt-nav"
+          aria-label={`${portal} navigation`}
+          data-lenis-prevent
+        >
           {portal === "optician" ? (
             opticianNavGroups.map((group) => (
               <div key={group.title} className="opt-nav-group">

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { DEMO_FRAMES, DEMO_STORES, type Frame, type OpticianStore } from "../../data/marketplace-demo";
+import { DEMO_FRAMES, DEMO_STORES } from "../../data/marketplace-demo";
+import type { Frame, OpticianStore } from "../../lib/marketplace-types";
 import { loadMarketplaceData } from "../../lib/marketplace";
 
 type MarketplaceState = {
@@ -27,7 +28,7 @@ export function useMarketplaceData() {
     setState((current) => ({ ...current, loading: true, error: undefined }));
     try {
       const data = await loadMarketplaceData();
-      setState({ ...data, loading: false });
+      setState({ ...data, isDemo: false, loading: false });
     } catch (cause: unknown) {
       console.error("Impossible de charger le catalogue marketplace.", cause);
       setState({
@@ -42,31 +43,11 @@ export function useMarketplaceData() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-    const load = async () => {
-      try {
-        const data = await loadMarketplaceData();
-        if (!active) return;
-        setState({ ...data, loading: false });
-      } catch (cause: unknown) {
-        if (!active) return;
-        console.error("Impossible de charger le catalogue marketplace.", cause);
-        setState({
-          frames: DEMO_FRAMES,
-          stores: DEMO_STORES,
-          isDemo: true,
-          notice: "Catalogue de démonstration affiché : les données en direct sont indisponibles.",
-          error: "Les boutiques n’ont pas pu être chargées. La sélection de démonstration reste disponible.",
-          loading: false,
-        });
-      }
-    };
-    void load();
-
+    const frame = window.requestAnimationFrame(() => void reload());
     return () => {
-      active = false;
+      window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [reload]);
 
   return { ...state, reload };
 }

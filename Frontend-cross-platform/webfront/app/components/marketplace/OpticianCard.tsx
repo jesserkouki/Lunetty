@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { ArrowUpRight, Glasses, Heart, MapPin, Navigation, Star } from "lucide-react";
-import type { Frame, Optician } from "../../data/marketplace-demo";
+import type { Frame, Optician } from "../../lib/marketplace-types";
 import { getFrameHref, getStoreHref } from "../../lib/marketplace";
 import TiltCard from "./TiltCard";
 import OpenStatusBadge from "./OpenStatusBadge";

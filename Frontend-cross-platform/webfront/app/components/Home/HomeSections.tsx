@@ -210,7 +210,25 @@ function Card({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
         {isFavoriteProductId(p.id) && (
-          <FavoriteButton productId={p.id} dark={dark} />
+          <FavoriteButton
+            productId={p.id}
+            product={{
+              id: p.id,
+              nom: p.nom,
+              slug: p.id,
+              marque: p.marque,
+              fabricant: null,
+              type: p.categorie,
+              categorie: p.categorie,
+              imageUrl: p.imageUrl,
+              price: p.prix === null ? null : String(p.prix),
+              currency: p.devise,
+              storeId: p.storeId,
+              storeName: p.opticianStore,
+              frameShape: p.frameShape,
+            }}
+            dark={dark}
+          />
         )}
         {rank && (
           <span className="absolute top-3 left-3 w-9 h-9 rounded-full bg-white text-stone-900 font-black text-sm flex items-center justify-center shadow-lg">

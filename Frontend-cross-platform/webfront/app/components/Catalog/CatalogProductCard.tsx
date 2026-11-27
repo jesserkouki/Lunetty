@@ -58,6 +58,7 @@ export default function CatalogProductCard({
           </span>
           <FavoriteButton
             productId={product.id}
+            product={product}
             dark={dark}
           />
         </div>

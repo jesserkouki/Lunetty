@@ -247,3 +247,21 @@ export class InventoryController {
     return this.inventory.createMovement(user.id, storeId, stockId, input);
   }
 }
+
+@Controller('stores/:storeId/catalogue')
+@ApiTags('Public Store Catalogue')
+@ApiParam({ name: 'storeId', format: 'uuid' })
+export class PublicStoreCatalogueController {
+  constructor(private readonly inventory: InventoryService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'List published, in-stock frames for an active store',
+  })
+  list(
+    @Param('storeId', ParseUUIDPipe) storeId: string,
+    @Query() pagination: PaginationDto,
+  ) {
+    return this.inventory.listPublishedFrames(storeId, pagination);
+  }
+}
