@@ -86,7 +86,12 @@ export class InventoryService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(userId: string, storeId: string, pagination: PaginationDto) {
+  async list(
+    userId: string,
+    storeId: string,
+    pagination: PaginationDto,
+    locationId?: string,
+  ) {
     await this.authorize(userId, storeId, 'inventory.view');
     const store = await this.prisma.magasin.findFirst({
       where: { id: storeId, supprime_le: null },
@@ -95,6 +100,7 @@ export class InventoryService {
     if (!store) throw new NotFoundException('Store not found');
     const where: Prisma.StockWhereInput = {
       location: { magasin_id: storeId },
+      ...(locationId ? { emplacement_id: locationId } : {}),
     };
     const [data, total] = await this.prisma.$transaction([
       this.prisma.stock.findMany({

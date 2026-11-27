@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { LogOut } from "lucide-react";
 import { useAuth, type Portal } from "../../../contexts/AuthContext";
 import {
   employeeService,
@@ -23,6 +24,7 @@ import {
   IconActivity,
   IconSettings,
   IconEyeglasses,
+  IconPlus,
   IconSparkles,
   IconX,
   IconChevronRight,
@@ -242,6 +244,7 @@ export function AppShell({
             )}
             {portal === "optician" && !storeLoadError && (
               <Link className="opt-store-create-link" href="/optician/setup">
+                <IconPlus aria-hidden="true" height={16} width={16} />
                 {availableStores.length === 0 ? "Créer une boutique" : "Ajouter une boutique"}
               </Link>
               )}
@@ -352,21 +355,24 @@ export function AppShell({
 
           <div className="opt-footer-controls">
             {portal === "optician" && (
-              <Link className="button secondary full-width" href="/">
+              <Link className="button secondary full-width opt-footer-link" href="/">
                 Espace client
               </Link>
             )}
             {portal === "client" && (
-              <Link className="button secondary full-width" href="/">
+              <Link className="button secondary full-width opt-footer-link" href="/">
                 Retour au site
               </Link>
             )}
             <button
               className="button secondary full-width opt-logout-btn"
               onClick={logout}
+              aria-label="Déconnexion"
+              title="Déconnexion"
               type="button"
             >
-              Déconnexion
+              <LogOut aria-hidden="true" size={16} />
+              <span className="opt-logout-label">Déconnexion</span>
             </button>
           </div>
         </div>

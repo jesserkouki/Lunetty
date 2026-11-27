@@ -218,6 +218,8 @@ or marked verified in the shared catalogue.
 ### Inventory
 
 - `GET|POST /api/v1/stores/:storeId/inventory` — store-scoped inventory.
+  `GET` accepts the optional `locationId` UUID filter to list products assigned
+  to one emplacement; results remain paginated and scoped to the authorized store.
 - `POST /api/v1/stores/:storeId/inventory/frame-images` — authenticated
   multipart upload requiring `inventory.create`. Fields include `image`,
   `brand`, `reference`, optional `model`, `color`, and `ean`, plus

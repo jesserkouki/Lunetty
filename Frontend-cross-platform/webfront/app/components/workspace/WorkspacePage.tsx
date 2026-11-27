@@ -265,21 +265,12 @@ export function WorkspacePage({
             }
             break;
           case "products": {
-            const [catalogResult, listingsResult, inventoryResult] =
+            const [listingsResult, inventoryResult] =
             await Promise.allSettled([
-            resourceId
-                ? Promise.all([productsService.find(resourceId), productsService.variants(resourceId)])
-                  : productsService.list(page),
                 storeId ? storesService.managedListings(storeId, page) : Promise.resolve(null),
               storeId ? inventoryService.list(storeId, page) : Promise.resolve(null),
             ]);
             setData({
-            catalog:
-              catalogResult.status === "fulfilled" ? catalogResult.value : null,
-            catalogError:
-              catalogResult.status === "rejected"
-                ? messageOf(catalogResult.reason)
-                : "",
             listings:
               listingsResult.status === "fulfilled"
                 ? listingsResult.value
@@ -412,6 +403,34 @@ export function WorkspacePage({
       throw reason;
     }
   }, []);
+  const updateStockSelection = useCallback(
+    async (stockIds: string[], input: Record<string, unknown>) => {
+      if (!stockIds.length) return;
+      setPending(true);
+      setError("");
+      setNotice("");
+      const results = await Promise.allSettled(
+        stockIds.map((stockId) =>
+          inventoryService.update(auth.storeId, stockId, input),
+        ),
+      );
+      const succeeded = results.filter((result) => result.status === "fulfilled").length;
+      const failures = results.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      if (succeeded) setVersion((previous) => previous + 1);
+      if (failures.length) {
+        const message =
+          `${succeeded} produit${succeeded === 1 ? "" : "s"} modifié${succeeded === 1 ? "" : "s"}; ` +
+          `${failures.length} échec${failures.length === 1 ? "" : "s"}. ${messageOf(failures[0].reason)}`;
+        setPending(false);
+        setError(message);
+        throw new Error(message);
+      }
+      setNotice(`${succeeded} produit${succeeded === 1 ? "" : "s"} mis à jour.`);
+    },
+    [auth.storeId],
+  );
   const readStockFrameImage = useCallback(
     (imageId: string) =>
       inventoryService.readFrameImage(auth.storeId, imageId),
@@ -1134,17 +1153,16 @@ export function WorkspacePage({
             }}
             onUpdateLocation={(locId, values) => run(() => storesService.updateLocation(auth.storeId, locId, values), "Emplacement mis à jour.")}
             onDeleteLocation={(locId) => run(() => storesService.deleteLocation(auth.storeId, locId), "Emplacement supprimé.")}
+            onLoadLocationStock={(locationId, page) =>
+              inventoryService.list(auth.storeId, page, locationId)
+            }
           />
         );
 
       case "products":
         return (
           <OpticianProducts
-            catalogData={data.catalog}
             listingsData={data.listings}
-            storeId={auth.storeId}
-            resourceId={resourceId}
-            onCreateListing={(values) => run(() => storesService.createListing(auth.storeId, values), "Annonce magasin créée.")}
             onAddListingVariant={(listingId, values) =>
               run(() => storesService.addListingVariant(auth.storeId, listingId, values), "Variante tarifée ajoutée.")
             }
@@ -1158,6 +1176,7 @@ export function WorkspacePage({
                 "Prix ou visibilité du stock mis à jour.",
               )
             }
+            onBulkUpdateStocks={updateStockSelection}
           />
         );
 

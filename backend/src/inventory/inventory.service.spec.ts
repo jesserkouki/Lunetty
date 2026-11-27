@@ -10,6 +10,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StoreAuthorizationService } from '../common/guards/store-authorization.service';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { InventoryService } from './inventory.service';
 
 describe('InventoryService', () => {
@@ -19,6 +20,43 @@ describe('InventoryService', () => {
   const audit = { record: jest.fn().mockResolvedValue({}) };
 
   beforeEach(() => jest.clearAllMocks());
+
+  it('filters inventory rows by an authorized store location', async () => {
+    const stock = { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) };
+    const prisma = {
+      magasin: { findFirst: jest.fn().mockResolvedValue({ devise: 'TND' }) },
+      stock,
+      $transaction: jest.fn((queries: Promise<unknown>[]) => Promise.all(queries)),
+    };
+    const service = new InventoryService(
+      prisma as unknown as PrismaService,
+      authorization as unknown as StoreAuthorizationService,
+      audit as never,
+    );
+    const pagination = Object.assign(new PaginationDto(), { page: 1, limit: 20 });
+
+    await service.list('user-id', 'store-id', pagination, 'location-id');
+
+    expect(authorization.requirePermission).toHaveBeenCalledWith(
+      'user-id',
+      'store-id',
+      'inventory.view',
+    );
+    expect(stock.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          location: { magasin_id: 'store-id' },
+          emplacement_id: 'location-id',
+        },
+      }),
+    );
+    expect(stock.count).toHaveBeenCalledWith({
+      where: {
+        location: { magasin_id: 'store-id' },
+        emplacement_id: 'location-id',
+      },
+    });
+  });
 
   it('reserves stock and records the movement in one transaction', async () => {
     const tx = {
