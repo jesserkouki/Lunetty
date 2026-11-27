@@ -6,9 +6,13 @@ import type {
 import type { Page } from "./users.service";
 
 export const inventoryService = {
-  list: (storeId: string, page = 1) =>
+  list: (storeId: string, page = 1, locationId?: string) =>
     apiRequest<Page<JsonRecord>>(
-      `stores/${storeId}/inventory${queryString({ page, limit: 20 })}`,
+      `stores/${storeId}/inventory${queryString({
+        page,
+        limit: 20,
+        ...(locationId ? { locationId } : {}),
+      })}`,
     ),
   find: (storeId: string, stockId: string) =>
     apiRequest<JsonRecord>(`stores/${storeId}/inventory/${stockId}`),

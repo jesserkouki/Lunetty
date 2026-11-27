@@ -1,4 +1,4 @@
-﻿-- AlterEnum
+-- AlterEnum
 ALTER TYPE "InventoryItemType" ADD VALUE 'CONTACT_LENS';
 
 -- AlterTable

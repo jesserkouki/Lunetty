@@ -36,6 +36,7 @@ import {
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateStockDto } from './dto/create-stock.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
+import { InventoryQueryDto } from './dto/inventory-query.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
 import { InventoryService } from './inventory.service';
 import {
@@ -62,9 +63,9 @@ export class InventoryController {
   list(
     @CurrentUser() user: AuthenticatedRequest['user'],
     @Param('storeId', ParseUUIDPipe) storeId: string,
-    @Query() pagination: PaginationDto,
+    @Query() query: InventoryQueryDto,
   ) {
-    return this.inventory.list(user.id, storeId, pagination);
+    return this.inventory.list(user.id, storeId, query, query.locationId);
   }
 
   @Post()

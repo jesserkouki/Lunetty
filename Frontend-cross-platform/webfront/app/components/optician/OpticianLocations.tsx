@@ -5,8 +5,11 @@ import {
   IconLocations,
   IconPlus,
   IconCheck,
+  IconSearch,
   IconX,
 } from "../ui/Icons";
+import type { JsonRecord } from "../../../services/api";
+import type { Page } from "../../../services/users.service";
 
 interface OpticianLocationsProps {
   locationsData: unknown;
@@ -16,6 +19,10 @@ interface OpticianLocationsProps {
   onCreateLocationType: (input: Record<string, unknown>) => Promise<unknown>;
   onUpdateLocation: (locationId: string, input: Record<string, unknown>) => Promise<void>;
   onDeleteLocation: (locationId: string) => Promise<void>;
+  onLoadLocationStock: (
+    locationId: string,
+    page: number,
+  ) => Promise<Page<JsonRecord>>;
 }
 
 export function OpticianLocations({
@@ -25,6 +32,7 @@ export function OpticianLocations({
   onCreateLocationType,
   onUpdateLocation,
   onDeleteLocation,
+  onLoadLocationStock,
 }: OpticianLocationsProps) {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [locationDrafts, setLocationDrafts] = useState([{ nom: "", code: "" }]);
@@ -47,6 +55,13 @@ export function OpticianLocations({
   const [creatingType, setCreatingType] = useState(false);
   const [deletingLocationId, setDeletingLocationId] = useState("");
   const [deleteError, setDeleteError] = useState("");
+  const [locationSearch, setLocationSearch] = useState("");
+  const [locationTypeFilter, setLocationTypeFilter] = useState("all");
+  const [stockLocation, setStockLocation] = useState<{ id: string; name: string } | null>(null);
+  const [locationStock, setLocationStock] = useState<Page<JsonRecord> | null>(null);
+  const [locationStockPage, setLocationStockPage] = useState(1);
+  const [loadingLocationStock, setLoadingLocationStock] = useState(false);
+  const [locationStockError, setLocationStockError] = useState("");
 
   const rawLocations = Array.isArray(locationsData)
     ? (locationsData as Array<Record<string, unknown>>)
@@ -60,6 +75,33 @@ export function OpticianLocations({
       (override) => !rawLocationTypes.some((type) => type.id === override.id),
     ),
   ].filter((type) => type.est_actif !== false);
+  const locationTypeOptions = [
+    { value: "standard:STORE", label: "Boutique" },
+    { value: "standard:ENTREPOT", label: "Entrepôt" },
+    { value: "standard:AUTRE", label: "Autre" },
+    ...locationTypes.map((type) => ({
+      value: `custom:${String(type.id)}`,
+      label: String(type.nom),
+    })),
+  ];
+  const filteredLocations = rawLocations.filter((location) => {
+    if (
+      locationTypeFilter !== "all" &&
+      locationTypeValue(location) !== locationTypeFilter
+    ) {
+      return false;
+    }
+    const query = locationSearch.trim().toLocaleLowerCase("fr");
+    if (!query) return true;
+    return [
+      String(location.nom ?? ""),
+      String(location.code ?? ""),
+      locationTypeLabel(location),
+    ]
+      .join(" ")
+      .toLocaleLowerCase("fr")
+      .includes(query);
+  });
   const canCreateNames =
     locationDrafts.length >= 1 &&
     locationDrafts.length <= 50 &&
@@ -87,6 +129,33 @@ export function OpticianLocations({
       ? { type_personnalise_id: value.slice("custom:".length) }
       : { type: value.slice("standard:".length), type_personnalise_id: null };
 
+  async function loadLocationStock(locationId: string, page: number) {
+    setLoadingLocationStock(true);
+    setLocationStock(null);
+    setLocationStockError("");
+    try {
+      const result = await onLoadLocationStock(locationId, page);
+      setLocationStock(result);
+      setLocationStockPage(page);
+    } catch (reason) {
+      setLocationStockError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible de charger les produits de cet emplacement.",
+      );
+    } finally {
+      setLoadingLocationStock(false);
+    }
+  }
+
+  function inspectLocationStock(location: Record<string, unknown>) {
+    const id = String(location.id ?? "");
+    setStockLocation({ id, name: String(location.nom ?? "Emplacement") });
+    setLocationStock(null);
+    setLocationStockPage(1);
+    void loadLocationStock(id, 1);
+  }
+
   return (
     <div className="opt-locations-page">
       <div className="opt-card">
@@ -113,9 +182,37 @@ export function OpticianLocations({
               {deleteError}
             </p>
           )}
+          {rawLocations.length > 0 && (
+            <div className="opt-locations-toolbar">
+              <label className="opt-locations-search">
+                <IconSearch height={16} width={16} />
+                <input
+                  aria-label="Rechercher un emplacement"
+                  placeholder="Rechercher par nom, code ou type"
+                  value={locationSearch}
+                  onChange={(event) => setLocationSearch(event.target.value)}
+                />
+              </label>
+              <label className="opt-locations-type-filter">
+                <span>Type</span>
+                <select
+                  value={locationTypeFilter}
+                  onChange={(event) => setLocationTypeFilter(event.target.value)}
+                >
+                  <option value="all">Tous les types</option>
+                  {locationTypeOptions.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
           {rawLocations.length > 0 ? (
-            <div className="opt-location-grid">
-              {rawLocations.map((loc) => {
+            filteredLocations.length ? (
+              <div className="opt-location-grid">
+              {filteredLocations.map((loc) => {
                 const id = String(loc.id);
                 const isDefault = Boolean(loc.est_par_defaut);
                 const isActive = loc.est_actif !== false;
@@ -128,7 +225,7 @@ export function OpticianLocations({
                       </div>
                       <div className="opt-loc-meta">
                         <h4>{String(loc.nom)}</h4>
-                        <span className="opt-loc-code">Code: {String(loc.code || "—")} • Type: {String(loc.type)}</span>
+                        <span className="opt-loc-code">Code: {String(loc.code || "—")} • Type: {locationTypeLabel(loc)}</span>
                       </div>
                     </div>
 
@@ -144,6 +241,13 @@ export function OpticianLocations({
                     </div>
 
                     <div className="opt-loc-actions">
+                      <button
+                        className="button primary small"
+                        type="button"
+                        onClick={() => inspectLocationStock(loc)}
+                      >
+                        Voir les produits
+                      </button>
                       <button
                         className="button secondary small"
                         onClick={() => setEditModal({
@@ -185,7 +289,14 @@ export function OpticianLocations({
                   </div>
                 );
               })}
-            </div>
+              </div>
+            ) : (
+              <div className="opt-empty-state">
+                <IconSearch height={32} width={32} />
+                <h4>Aucun emplacement trouvé</h4>
+                <p>Essayez un autre nom, code ou type.</p>
+              </div>
+            )
           ) : (
             <div className="opt-empty-state">
               <IconLocations height={36} width={36} />
@@ -522,8 +633,143 @@ export function OpticianLocations({
           </div>
         </div>
       )}
+
+      {stockLocation && (
+        <div
+          className="opt-modal-overlay"
+          onClick={() => setStockLocation(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="location-stock-title"
+        >
+          <div
+            className="opt-modal-card opt-location-stock-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="opt-modal-header">
+              <div>
+                <h3 id="location-stock-title">Produits de {stockLocation.name}</h3>
+                <p className="opt-modal-sub">Articles actuellement affectés à cet emplacement.</p>
+              </div>
+              <button
+                className="opt-modal-close"
+                onClick={() => setStockLocation(null)}
+                type="button"
+                aria-label="Fermer"
+              >
+                <IconX height={18} width={18} />
+              </button>
+            </div>
+            <div className="opt-modal-body" data-lenis-prevent>
+              {loadingLocationStock && <p role="status">Chargement des produits…</p>}
+              {locationStockError && <p className="error-message" role="alert">{locationStockError}</p>}
+              {!loadingLocationStock && locationStock && (
+                locationStock.data.length ? (
+                  <div className="opt-location-stock-list">
+                    {locationStock.data.map((item) => {
+                      const onHand = Number(item.quantite_disponible ?? 0);
+                      const reserved = Number(item.quantite_reservee ?? 0);
+                      return (
+                        <article className="opt-location-stock-item" key={String(item.id)}>
+                          <div>
+                            <strong>{locationStockTitle(item)}</strong>
+                            <span>{locationStockType(item)} · Réf. {String(item.marque_reference || "—")}</span>
+                          </div>
+                          <div className="opt-location-stock-quantity">
+                            <span>{Math.max(0, onHand - reserved)} disponible(s)</span>
+                            <small>{onHand} en stock · {reserved} réservé(s)</small>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="opt-empty-state">
+                    <IconLocations height={32} width={32} />
+                    <h4>Aucun produit dans cet emplacement</h4>
+                    <p>Les articles que vous y affecterez apparaîtront ici.</p>
+                  </div>
+                )
+              )}
+            </div>
+            {locationStock && locationStock.meta.totalPages > 1 && (
+              <div className="opt-location-stock-pagination">
+                <button
+                  className="button secondary small"
+                  type="button"
+                  disabled={loadingLocationStock || locationStockPage <= 1}
+                  onClick={() => void loadLocationStock(stockLocation.id, locationStockPage - 1)}
+                >
+                  Précédent
+                </button>
+                <span>Page {locationStock.meta.page} sur {locationStock.meta.totalPages}</span>
+                <button
+                  className="button secondary small"
+                  type="button"
+                  disabled={loadingLocationStock || locationStockPage >= locationStock.meta.totalPages}
+                  onClick={() => void loadLocationStock(stockLocation.id, locationStockPage + 1)}
+                >
+                  Suivant
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function locationTypeValue(location: Record<string, unknown>): string {
+  const customTypeId = location.type_personnalise_id;
+  if (typeof customTypeId === "string" && customTypeId) {
+    return `custom:${customTypeId}`;
+  }
+  return `standard:${String(location.type ?? "AUTRE")}`;
+}
+
+function locationTypeLabel(location: Record<string, unknown>): string {
+  const customType = location.type_personnalise;
+  if (isRecord(customType) && typeof customType.nom === "string") {
+    return customType.nom;
+  }
+  const names: Record<string, string> = {
+    STORE: "Boutique",
+    ENTREPOT: "Entrepôt",
+    AUTRE: "Autre",
+  };
+  const type = String(location.type ?? "");
+  return names[type] ?? type.replaceAll("_", " ");
+}
+
+function locationStockTitle(item: JsonRecord): string {
+  const product = isRecord(item.catalogueProduct) ? item.catalogueProduct : {};
+  const listingVariant = isRecord(item.variante_annonce) ? item.variante_annonce : {};
+  const listing = isRecord(listingVariant.annonce) ? listingVariant.annonce : {};
+  const listingProduct = isRecord(listing.produit) ? listing.produit : {};
+  const title =
+    product.model ??
+    listingProduct.nom ??
+    item.marque_reference ??
+    (item.type_article === "VERRE_VUE"
+      ? "Verre de vue"
+      : item.type_article === "VERRE_SOLEIL"
+        ? "Verre solaire"
+        : item.type_article === "LENTILLE"
+          ? "Lentille"
+          : "Monture");
+  return String(title);
+}
+
+function locationStockType(item: JsonRecord): string {
+  const names: Record<string, string> = {
+    MONTURE: "Monture",
+    VERRE_VUE: "Verre de vue",
+    VERRE_SOLEIL: "Verre solaire",
+    LENTILLE: "Lentille",
+  };
+  const type = String(item.type_article ?? "");
+  return names[type] ?? "Article";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
